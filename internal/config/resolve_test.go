@@ -137,7 +137,7 @@ func TestResolve_DoesNotInheritHubAuthSecretsIntoStdioEnv(t *testing.T) {
 	cfg := &config.Config{
 		Version: 1,
 		Hub: config.HubConfig{
-			Auth: config.HubAuthConfig{BearerToken: "${MCP_HUB_TOKEN}"},
+			Auth:  config.HubAuthConfig{BearerToken: "${MCP_HUB_TOKEN}"},
 			Admin: config.AdminConfig{Enabled: true, Token: "${MCP_HUB_ADMIN_TOKEN}"},
 		},
 		MCPServers: map[string]config.ServerConfig{

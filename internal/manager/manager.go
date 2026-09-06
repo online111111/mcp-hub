@@ -86,20 +86,15 @@ type Manager struct {
 	readyResetDur time.Duration
 	drainTimeout  time.Duration
 
-	// Status diagnostics and reload tracking
-	restartRequired bool
-	lastReload      string
-	recentCalls     []inbound.RecentCallDTO
-	maxRecentCalls  int
+	// Bounded, sanitized diagnostics owned by the routing manager.
+	recentCalls    []inbound.RecentCallDTO
+	maxRecentCalls int
 
 	ctx     context.Context
 	cancel  context.CancelFunc
 	running bool
 	stopped bool
 }
-
-// Verify Manager implements inbound.ManagerCallback.
-var _ inbound.ManagerCallback = (*Manager)(nil)
 
 // NewManager creates a new Manager instance wired to the given Publisher.
 func NewManager(pub catalog.Publisher, opts ...Option) *Manager {
@@ -115,7 +110,6 @@ func NewManager(pub catalog.Publisher, opts ...Option) *Manager {
 		backoffDelays:  defaultBackoffDelays,
 		readyResetDur:  defaultReadyResetDuration,
 		drainTimeout:   defaultDrainTimeout,
-		lastReload:     "initial configuration loaded",
 		maxRecentCalls: 200,
 	}
 
@@ -244,8 +238,6 @@ func (m *Manager) Apply(ctx context.Context, cfg *config.ResolvedConfig) error {
 
 	m.revision++
 	rev := m.revision
-	m.lastReload = fmt.Sprintf("revision %d applied at %s", rev, time.Now().Format(time.RFC3339))
-
 	// 1. Identify deleted servers
 	toRemove := make(map[string]*Coordinator)
 	for id, coord := range m.coordinators {
@@ -424,34 +416,6 @@ func (m *Manager) GetRecentCalls() []inbound.RecentCallDTO {
 	copied := make([]inbound.RecentCallDTO, len(m.recentCalls))
 	copy(copied, m.recentCalls)
 	return copied
-}
-
-// RestartRequired reports whether a reload requires process restart.
-func (m *Manager) RestartRequired() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.restartRequired
-}
-
-// SetRestartRequired updates whether process restart is required.
-func (m *Manager) SetRestartRequired(val bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.restartRequired = val
-}
-
-// LastReloadStatus returns the status of the latest config reload.
-func (m *Manager) LastReloadStatus() string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.lastReload
-}
-
-// SetLastReloadStatus sets the last reload status text.
-func (m *Manager) SetLastReloadStatus(status string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.lastReload = status
 }
 
 // RecordCall records a tool call summary for diagnostics.

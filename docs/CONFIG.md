@@ -59,7 +59,7 @@ mcp-hub import --from source.json --config config.json --yes
 
 Import handles common `mcpServers` files, but does not start servers. A URL without an explicit type requires `--remote-type streamable_http`; old `sse` is not silently converted. Import previews show header/environment names, not values, and overwriting an existing server ID is rejected.
 
-Configuration writes use a same-directory temporary file, flush/sync, close, and atomic replacement. A lock file and pre-write digest check prevent concurrent CLI writers from overwriting a changed file. An invalid reload leaves the last valid runtime configuration in place and reports the rejection in diagnostics.
+Configuration writes use a same-directory temporary file, flush/sync, close, and atomic replacement. A lock file and pre-write digest check prevent concurrent writers from overwriting a changed file. Admin changes that cannot be applied to the live runtime are atomically rolled back and the previous runtime snapshot is restored. An invalid external edit leaves the last valid runtime configuration in place and reports the rejection in diagnostics.
 
 ## Validate and serve
 

@@ -66,6 +66,13 @@ MCP_HUB_TOKEN='...' mcp-hub stdio --connect https://mcp.example.com/mcp
 
 也可使用 `--token`，但命令行参数可能被同机用户的进程列表看到，优先使用环境变量。
 
+远程诊断命令使用同一枚 MCP Token：
+
+```bash
+MCP_HUB_TOKEN='...' mcp-hub status --endpoint https://mcp.example.com
+MCP_HUB_TOKEN='...' mcp-hub doctor --endpoint https://mcp.example.com
+```
+
 ## 5. 管理台安全机制
 
 - 管理 Token 与 MCP Token 分离；

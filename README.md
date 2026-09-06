@@ -1,75 +1,142 @@
 # MCP Hub
 
-MCP Hub is a personal MCP aggregation and request-routing gateway: configure downstream MCP servers once, then connect multiple clients to the Hub.
+MCP Hub is a single-binary gateway for running and aggregating multiple MCP
+servers. Configure downstream services once, then expose one Streamable HTTP
+endpoint to IDEs, agents, and stdio-only clients.
 
-> Current state: P0 implementation and automated verification are complete on Windows amd64. Actual Cursor/Claude Desktop compatibility is still `NOT_RUN`; see [`docs/IMPLEMENTATION-STATUS.md`](docs/IMPLEMENTATION-STATUS.md).
+The v0.3 refactor separates configuration loading, live-runtime control,
+protocol routing, and the admin UI. The admin console is usable in both local
+and reverse-proxied public mode and has its own browser-level regression suite.
+
+## What it provides
+
+- One `/mcp` endpoint with a dynamically updated tool catalog.
+- Managed stdio children and remote Streamable HTTP downstreams.
+- Stable public tool names and explicit, no-replay request routing.
+- Strict JSON configuration with atomic compare-and-swap writes.
+- Hot reload for downstream changes and restart detection for listener changes.
+- A responsive `/admin/` console for status, calls, and server configuration.
+- Loopback-safe local mode and an explicit authenticated public mode.
+- A stdio bridge for clients that cannot connect to HTTP MCP endpoints.
 
 ## Quick start
 
-1. Create a JSON configuration file. [`config.example.json`](config.example.json) is a safe starting point.
-2. Validate it without starting processes or making network calls:
+Build the binary and copy the example configuration:
 
-   ```powershell
-   .\mcp-hub.exe validate --config .\config.json
-   ```
-
-3. Start the Hub:
-
-   ```powershell
-   .\mcp-hub.exe serve --config .\config.json
-   ```
-
-   The Hub binds a loopback address and exposes the stateful MCP endpoint at `/mcp`.
-4. Configure HTTP-capable clients with `http://127.0.0.1:8080/mcp`, or export a stdio entry:
-
-   ```powershell
-   .\mcp-hub.exe export --client cursor --transport stdio --endpoint http://127.0.0.1:8080/mcp
-   ```
-
-   The exported stdio command runs `mcp-hub stdio --connect ...`; it connects to the existing Hub and does **not** start downstream MCP processes.
-
-Useful read-only commands:
-
-```powershell
-.\mcp-hub.exe status --endpoint http://127.0.0.1:8080
-.\mcp-hub.exe doctor --endpoint http://127.0.0.1:8080
+```bash
+go build -trimpath -o mcp-hub ./cmd/mcp-hub
+cp config.example.json config.json
+./mcp-hub validate --config ./config.json
+./mcp-hub serve --config ./config.json
 ```
 
-`import` supports `--dry-run` and requires `--yes` for a write. It never starts a downstream service during import.
+The default MCP endpoint is `http://127.0.0.1:8080/mcp`.
 
-## Configuration and security
+For a stdio-only client, generate a client entry:
 
-- Configuration is strict JSON: duplicate keys, unknown fields, trailing JSON, invalid transport fields, and invalid URLs are rejected.
-- New tools are open by default. Use `tools.disabled` with original downstream tool names for a declarative blacklist.
-- Environment references use one-pass `${NAME}` expansion; `$${NAME}` is literal. Secrets are resolved only in memory and are not exported by diagnostics.
-- The Hub listens on loopback only, rejects requests with `Origin`, checks `Host`, disables redirects for downstream HTTP, caps POST bodies at 8 MiB, and limits upstream sessions.
-- Tool calls are routed by an explicit table, forwarded with raw JSON arguments, and are never automatically replayed after timeout or cancellation.
+```bash
+./mcp-hub export \
+  --client cursor \
+  --transport stdio \
+  --endpoint http://127.0.0.1:8080/mcp
+```
 
-See [`docs/CONFIG.md`](docs/CONFIG.md), [`docs/SECURITY.md`](docs/SECURITY.md), [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md), and [`docs/VPS.md`](docs/VPS.md) for operational details.
+Inspect a running Hub:
 
-## Embedded management page
+```bash
+./mcp-hub status --endpoint http://127.0.0.1:8080
+./mcp-hub doctor --endpoint http://127.0.0.1:8080
+```
 
-Enable `hub.admin` to use the built-in responsive management page at `/admin/`. For a public VPS, explicitly enable `hub.publicMode`, configure an HTTPS `publicUrl`, an `allowedHosts` list, separate MCP/admin bearer tokens, and a narrowly scoped `trustedProxies` list. A safe reverse-proxy example is provided in [`config.vps.example.json`](config.vps.example.json) and [`docs/VPS.md`](docs/VPS.md).
+For a public Hub, set `MCP_HUB_TOKEN` or pass `--token` to `status`, `doctor`,
+and `stdio`. Prefer the environment variable on shared machines because command
+arguments may be visible in the process list.
+
+## Configuration
+
+Configuration is strict JSON. Duplicate keys, unknown fields, trailing values,
+invalid transport combinations, unsafe remote HTTP URLs, and missing environment
+references are rejected before listeners or child processes are started.
+
+```json
+{
+  "version": 1,
+  "hub": { "listen": "127.0.0.1:8080" },
+  "defaults": {
+    "startupTimeout": "20s",
+    "callTimeout": "60s",
+    "maxConcurrency": 8
+  },
+  "mcpServers": {
+    "memory": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
+    }
+  }
+}
+```
+
+See [configuration](docs/CONFIG.md) for every field and reload rule.
+
+## Admin console and public deployment
+
+Enable `hub.admin` to serve the embedded management console at `/admin/`. Admin
+sessions use HttpOnly/SameSite cookies, synchronizer CSRF tokens, strict origin
+checks, bounded login/API rates, secret placeholders, and ETag/CAS writes.
+
+Public deployment is fail-closed. It requires `hub.publicMode`, an HTTPS
+`publicUrl`, an `allowedHosts` list, trusted reverse-proxy CIDRs, and separate MCP
+and admin tokens. The Hub may still listen on loopback behind Caddy or Nginx.
+
+Use [the VPS deployment guide](docs/VPS.md) and
+[`config.vps.example.json`](config.vps.example.json) as the baseline.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    Client["HTTP or stdio client"] --> Inbound["Inbound / bridge"]
+    Inbound --> Publisher
+    Publisher --> Router
+    Router --> Manager["Downstream manager"]
+    Runtime["Runtime controller"] --> Manager
+    Manager --> Servers["MCP servers"]
+```
+
+Configuration on disk remains the source of truth. The runtime controller
+applies only validated, resolved snapshots and retains the last healthy runtime
+when an edited file is invalid. See [architecture](docs/ARCHITECTURE.md) for
+package boundaries and invariants.
 
 ## Development and verification
 
-The production module targets Go 1.25 and pins the official MCP Go SDK at v1.4.1. The Hub itself is a single binary and does not require Node.js or Python; a stdio downstream may still require its own runtime (Node.js, Python, uv, or another executable).
+The module targets Go 1.25 and CI builds with the patched Go 1.26.6 toolchain.
+The production binary has no Node.js runtime dependency; Node is used only for
+the admin UI's zero-dependency tests.
 
-```powershell
-go fmt ./...
-go vet ./...
+```bash
 go test -count=1 -timeout 180s ./...
 go test -race -count=1 -timeout 180s ./...
-go build -trimpath -ldflags="-s -w" -o dist\mcp-hub.exe .\cmd\mcp-hub
+go vet ./...
+node --check internal/admin/web/app.js
+node --test internal/admin/webtest/*.test.mjs
+go build -trimpath -ldflags="-s -w" -o dist/mcp-hub ./cmd/mcp-hub
 ```
 
-The SDK feasibility probe is an independent nested module and must be run from its own directory:
+The independent SDK probe lives in `verification/sdkprobe` and must be tested
+from that directory. GitHub Actions runs Go tests, race tests, vet, the SDK
+probe, builds, and the admin UI tests.
 
-```powershell
-Push-Location .\verification\sdkprobe
-$env:GOPROXY='https://goproxy.cn,direct'
-go test -race -count=1 ./...
-Pop-Location
-```
+Automated Windows and Linux verification does not prove compatibility with
+every third-party MCP server or GUI client. The exact manual compatibility
+matrix is tracked in [implementation status](docs/IMPLEMENTATION-STATUS.md).
 
-Do not treat a cross-compiled binary as proof of native process ownership. Windows Job Object tests are native; POSIX process-group tests require Linux CI. See [`docs/IMPLEMENTATION-STATUS.md`](docs/IMPLEMENTATION-STATUS.md) for evidence boundaries and remaining manual checks.
+## Security boundary
+
+MCP Hub is a trusted personal gateway, not a sandbox. stdio downstreams execute
+with the Hub user's privileges. Run the service as a dedicated non-root user,
+keep tokens in environment variables, and only configure MCP servers you trust.
+
+See [security](docs/SECURITY.md) for the complete boundary and operational
+guidance.

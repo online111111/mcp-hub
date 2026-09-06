@@ -2,7 +2,9 @@ package admin
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -12,6 +14,61 @@ import (
 	"testing"
 	"time"
 )
+
+func TestEmbeddedAdminUsesCSPCompatibleModuleEvents(t *testing.T) {
+	index, err := webFiles.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app, err := webFiles.ReadFile("web/app.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(index, []byte(`script type="module"`)) {
+		t.Fatal("admin entrypoint is not loaded as a module")
+	}
+	if bytes.Contains(index, []byte("onclick=")) || bytes.Contains(app, []byte("onclick=")) {
+		t.Fatal("inline event handler is incompatible with the admin CSP")
+	}
+}
+
+func TestValidOriginUsesRequestOriginInLocalMode(t *testing.T) {
+	h, err := New(Options{ConfigPath: "config.json", AdminToken: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:8080/api/admin/v1/auth/login", nil)
+	req.Host = "127.0.0.1:8080"
+	req.Header.Set("Origin", "http://127.0.0.1:8080")
+	if !h.validOrigin(req) {
+		t.Fatal("same-origin local request was rejected")
+	}
+	req.Header.Set("Origin", "http://attacker.example")
+	if h.validOrigin(req) {
+		t.Fatal("cross-origin local request was accepted")
+	}
+}
+
+func TestDecodeJSONBodyRejectsTrailingValue(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"token":"one"} {"token":"two"}`))
+	var body struct {
+		Token string `json:"token"`
+	}
+	if err := decodeJSONBody(req, &body); err == nil {
+		t.Fatal("expected trailing JSON value to be rejected")
+	}
+}
+
+func TestDecodeJSONBodyRejectsOversizedInput(t *testing.T) {
+	body := `{"token":"` + strings.Repeat("x", maxAdminBodySize) + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	var target struct {
+		Token string `json:"token"`
+	}
+	if err := decodeJSONBody(req, &target); err == nil {
+		t.Fatal("expected oversized JSON body to be rejected")
+	}
+}
 
 func newAdminTest(t *testing.T) (*Handler, string) {
 	t.Helper()
@@ -34,7 +91,14 @@ func login(t *testing.T, server *httptest.Server) (*http.Client, string) {
 	t.Helper()
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
-	resp, err := client.Post(server.URL+"/api/admin/v1/auth/login", "application/json", strings.NewReader(`{"token":"admin-secret"}`))
+	request, err := http.NewRequest(http.MethodPost, server.URL+"/api/admin/v1/auth/login", strings.NewReader(`{"token":"admin-secret"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	// Browsers send Origin on the same-origin fetch used by the admin page.
+	request.Header.Set("Origin", server.URL)
+	resp, err := client.Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,5 +204,48 @@ func TestEmbeddedAdminPage(t *testing.T) {
 	}
 	if resp.Header().Get("Content-Security-Policy") == "" {
 		t.Fatal("missing CSP")
+	}
+	moduleRequest := httptest.NewRequest(http.MethodGet, "/admin/app-core.mjs", nil)
+	moduleResponse := httptest.NewRecorder()
+	h.ServeHTTP(moduleResponse, moduleRequest)
+	if moduleResponse.Code != http.StatusOK || !strings.Contains(moduleResponse.Header().Get("Content-Type"), "javascript") {
+		t.Fatalf("unexpected module response %d (%s)", moduleResponse.Code, moduleResponse.Header().Get("Content-Type"))
+	}
+}
+
+func TestAdminRollsBackConfigWhenLiveReloadFails(t *testing.T) {
+	h, configPath := newAdminTest(t)
+	original, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloadCalls := 0
+	h.opts.Reload = func(context.Context) error {
+		reloadCalls++
+		if reloadCalls == 1 {
+			return errors.New("apply failed")
+		}
+		return nil
+	}
+	raw, digest, err := h.readRawConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(raw.MCPServers, "remote")
+	request := httptest.NewRequest(http.MethodDelete, "/api/admin/v1/servers/remote", strings.NewReader(`{}`))
+	response := httptest.NewRecorder()
+	h.writeConfig(response, request, raw, digest)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected reload failure, got %d: %s", response.Code, response.Body.String())
+	}
+	if reloadCalls != 2 {
+		t.Fatalf("expected failed apply plus runtime restore, got %d reload calls", reloadCalls)
+	}
+	restored, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(restored, original) {
+		t.Fatalf("configuration was not rolled back\nwant: %s\n got: %s", original, restored)
 	}
 }

@@ -3,8 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -14,17 +12,17 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sort"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"mcp-hub/internal/admin"
 	"mcp-hub/internal/bridge"
+	"mcp-hub/internal/buildinfo"
 	"mcp-hub/internal/inbound"
 	"mcp-hub/internal/manager"
+	hubruntime "mcp-hub/internal/runtime"
 )
 
 // Exit codes per contract:
@@ -38,258 +36,6 @@ const (
 	ExitInvalidParams      = 2
 	ExitRuntimeUnavailable = 3
 )
-
-// HubManagerAdapter adapts manager.Manager to inbound.ManagerCallback,
-// managing status inspection and configuration reload loops.
-type HubManagerAdapter struct {
-	mu                     sync.RWMutex
-	mgr                    *manager.Manager
-	configPath             string
-	currentListen          string
-	configuredEnabledCount int
-	restartRequired        bool
-	lastReload             string
-	appliedDigest          string
-	candidateDigest        string
-	candidateCount         int
-}
-
-// NewHubManagerAdapter creates an adapter for manager.Manager.
-func NewHubManagerAdapter(mgr *manager.Manager, configPath, currentListen string, configuredEnabledCount int) *HubManagerAdapter {
-	adapter := &HubManagerAdapter{
-		mgr:                    mgr,
-		configPath:             configPath,
-		currentListen:          currentListen,
-		configuredEnabledCount: configuredEnabledCount,
-		lastReload:             "initial config loaded",
-	}
-	if data, err := os.ReadFile(configPath); err == nil {
-		adapter.appliedDigest = digestConfigBytes(data)
-	}
-	return adapter
-}
-
-func digestConfigBytes(data []byte) string {
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
-}
-
-// IsReady reports readiness per contract:
-// ready if no enabled servers, or at least one is Ready with published tools.
-func (a *HubManagerAdapter) IsReady() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	// If no servers are enabled in configuration, readyz returns 200 per contract
-	if a.configuredEnabledCount == 0 {
-		return true
-	}
-
-	if a.mgr == nil {
-		return false
-	}
-
-	statuses := a.mgr.Status()
-	if len(statuses) == 0 {
-		return false
-	}
-
-	hasReadyWithTools := false
-	for _, s := range statuses {
-		if s.Enabled && s.State == manager.StateReady && s.PublishedTools > 0 {
-			hasReadyWithTools = true
-			break
-		}
-	}
-
-	return hasReadyWithTools
-}
-
-// GetServerStatuses returns sanitized statuses of managed servers.
-func (a *HubManagerAdapter) GetServerStatuses() []inbound.ServerStatusDTO {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	if a.mgr == nil {
-		return nil
-	}
-
-	statuses := a.mgr.Status()
-	res := make([]inbound.ServerStatusDTO, 0, len(statuses))
-	for id, s := range statuses {
-		res = append(res, inbound.ServerStatusDTO{
-			ID:                   id,
-			State:                s.State,
-			PublishedToolCount:   s.PublishedTools,
-			UnpublishedToolCount: 0,
-			ActiveCalls:          s.ActiveLeases,
-			DesiredRevision:      s.DesiredRevision,
-			ActiveRevision:       s.ActiveRevision,
-			ErrorCategory:        s.LastError,
-		})
-	}
-
-	sort.Slice(res, func(i, j int) bool {
-		return res[i].ID < res[j].ID
-	})
-	return res
-}
-
-// GetRecentCalls returns sanitized summaries recorded by the manager.
-func (a *HubManagerAdapter) GetRecentCalls() []inbound.RecentCallDTO {
-	a.mu.RLock()
-	mgr := a.mgr
-	a.mu.RUnlock()
-	if mgr == nil {
-		return nil
-	}
-	return mgr.GetRecentCalls()
-}
-
-// RestartRequired reports whether a listen address change requires restarting the process.
-func (a *HubManagerAdapter) RestartRequired() bool {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.restartRequired
-}
-
-// LastReloadStatus returns the outcome of the latest config reload.
-func (a *HubManagerAdapter) LastReloadStatus() string {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.lastReload
-}
-
-// StartReloadLoop starts periodic sampling and reloading of the configuration.
-func (a *HubManagerAdapter) StartReloadLoop(ctx context.Context, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	go func() {
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				a.pollReload(ctx)
-			}
-		}
-	}()
-}
-
-// ReloadNow validates and applies the current file immediately after an atomic
-// admin write. Polling remains the fallback for external editor changes.
-func (a *HubManagerAdapter) ReloadNow(ctx context.Context) error {
-	cfg, resolved, err := ValidateConfig(a.configPath)
-	if err != nil {
-		return err
-	}
-	if a.mgr != nil {
-		if err := a.mgr.Apply(ctx, resolved); err != nil {
-			return err
-		}
-	}
-	enabled := 0
-	for _, server := range cfg.MCPServers {
-		if server.Enabled == nil || *server.Enabled {
-			enabled++
-		}
-	}
-	data, err := os.ReadFile(a.configPath)
-	if err != nil {
-		return err
-	}
-	a.mu.Lock()
-	a.configuredEnabledCount = enabled
-	if resolved.Listen != a.currentListen {
-		a.restartRequired = true
-		a.lastReload = "restart_required (listen address changed)"
-	} else {
-		a.lastReload = "reloaded successfully"
-	}
-	a.appliedDigest = digestConfigBytes(data)
-	a.candidateDigest = ""
-	a.candidateCount = 0
-	a.mu.Unlock()
-	return nil
-}
-
-func (a *HubManagerAdapter) pollReload(ctx context.Context) {
-	data, err := os.ReadFile(a.configPath)
-	if err != nil {
-		a.mu.Lock()
-		a.lastReload = "reload rejected: configuration unavailable"
-		a.candidateDigest = ""
-		a.candidateCount = 0
-		a.mu.Unlock()
-		return
-	}
-	digest := digestConfigBytes(data)
-
-	a.mu.Lock()
-	if digest == a.appliedDigest {
-		a.candidateDigest = ""
-		a.candidateCount = 0
-		a.mu.Unlock()
-		return
-	}
-	if digest != a.candidateDigest {
-		a.candidateDigest = digest
-		a.candidateCount = 1
-		a.mu.Unlock()
-		return
-	}
-	a.candidateCount++
-	if a.candidateCount < 2 {
-		a.mu.Unlock()
-		return
-	}
-	a.mu.Unlock()
-
-	newCfg, newResolved, err := ValidateConfig(a.configPath)
-
-	a.mu.Lock()
-	if err != nil {
-		a.lastReload = "reload rejected: invalid configuration"
-		a.candidateDigest = ""
-		a.candidateCount = 0
-		a.mu.Unlock()
-		return
-	}
-
-	newEnabledCount := 0
-	for _, s := range newCfg.MCPServers {
-		if s.Enabled == nil || *s.Enabled {
-			newEnabledCount++
-		}
-	}
-	a.configuredEnabledCount = newEnabledCount
-
-	if newResolved.Listen != a.currentListen {
-		a.restartRequired = true
-		a.lastReload = "restart_required (listen address changed)"
-	} else {
-		a.lastReload = "reloaded successfully"
-	}
-	mgr := a.mgr
-	a.mu.Unlock()
-
-	if mgr != nil {
-		if applyErr := mgr.Apply(ctx, newResolved); applyErr != nil {
-			a.mu.Lock()
-			a.lastReload = "reload rejected: apply failed"
-			a.candidateDigest = ""
-			a.candidateCount = 0
-			a.mu.Unlock()
-			return
-		}
-	}
-
-	a.mu.Lock()
-	a.appliedDigest = digest
-	a.candidateDigest = ""
-	a.candidateCount = 0
-	a.mu.Unlock()
-}
 
 // Run parses command-line arguments and executes the requested subcommand.
 func Run(args []string, stdout, stderr io.Writer) int {
@@ -313,6 +59,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runDoctor(args[1:], stdout, stderr)
 	case "stdio":
 		return runStdio(args[1:], stdout, stderr)
+	case "version", "--version":
+		fmt.Fprintf(stdout, "%s %s\n", buildinfo.Name, buildinfo.Version)
+		return ExitSuccess
 	case "help", "-h", "--help":
 		printUsage(stdout)
 		return ExitSuccess
@@ -327,12 +76,13 @@ func printUsage(w io.Writer) {
 	fmt.Fprintf(w, `MCP Hub - Model Context Protocol Hub & Aggregator
 
 Usage:
+  mcp-hub version
   mcp-hub serve --config <path>
   mcp-hub validate --config <path>
   mcp-hub import --from <path> --config <path> [--dry-run | --yes] [--remote-type <type>]
   mcp-hub export [--client <cursor|claude-desktop>] [--transport <stdio|http>] [--endpoint <url>] [--token-env]
-  mcp-hub status [--endpoint <url>] [--json]
-  mcp-hub doctor [--endpoint <url>]
+  mcp-hub status [--endpoint <url>] [--token <bearer-token>] [--json]
+  mcp-hub doctor [--endpoint <url>] [--token <bearer-token>]
   mcp-hub stdio --connect <url> [--token <bearer-token>]
 `)
 }
@@ -368,7 +118,7 @@ func runServe(args []string, stdout, stderr io.Writer, stopCh <-chan struct{}) i
 	defer listener.Close()
 
 	// 3. Initialize SDK Hub server with Tools.ListChanged=true capability
-	hubServer := inbound.NewHubServer("mcp-hub", "0.1.0")
+	hubServer := inbound.NewHubServer(buildinfo.Name, buildinfo.Version)
 	publisher, err := inbound.NewPublisher(hubServer, nil, nil)
 	if err != nil {
 		fmt.Fprintf(stderr, "failed to initialize publisher: %v\n", err)
@@ -391,16 +141,9 @@ func runServe(args []string, stdout, stderr io.Writer, stopCh <-chan struct{}) i
 		return ExitInternalError
 	}
 
-	enabledCount := 0
-	for _, s := range cfg.MCPServers {
-		if s.Enabled == nil || *s.Enabled {
-			enabledCount++
-		}
-	}
-
 	// 5. Initialize Adapter and start reload loop
-	adapter := NewHubManagerAdapter(mgr, *configPath, resolved.Listen, enabledCount)
-	adapter.StartReloadLoop(mgrCtx, 1*time.Second)
+	controller := hubruntime.NewController(mgr, *configPath, resolved.Listen, nil)
+	controller.Start(mgrCtx, time.Second)
 
 	// 6. Initialize optional embedded admin UI and inbound HTTP server.
 	var adminHandler http.Handler
@@ -414,15 +157,15 @@ func runServe(args []string, stdout, stderr io.Writer, stopCh <-chan struct{}) i
 			SessionTimeout: resolved.AdminSessionTimeout,
 			Status: func() any {
 				return inbound.StatusDTO{
-					Version:          "0.2.0",
+					Version:          buildinfo.Version,
 					CatalogRevision:  publisher.Revision(),
-					RestartRequired:  adapter.RestartRequired(),
-					LastReloadStatus: adapter.LastReloadStatus(),
-					Servers:          adapter.GetServerStatuses(),
-					RecentCalls:      adapter.GetRecentCalls(),
+					RestartRequired:  controller.RestartRequired(),
+					LastReloadStatus: controller.LastReloadStatus(),
+					Servers:          controller.GetServerStatuses(),
+					RecentCalls:      controller.GetRecentCalls(),
 				}
 			},
-			Reload: adapter.ReloadNow,
+			Reload: controller.ReloadNow,
 		})
 		if adminErr != nil {
 			fmt.Fprintf(stderr, "failed to initialize admin UI: %v\n", adminErr)
@@ -430,8 +173,8 @@ func runServe(args []string, stdout, stderr io.Writer, stopCh <-chan struct{}) i
 		}
 		adminHandler = adminUI
 	}
-	httpSrv, err := inbound.NewHTTPServer(listener, publisher, adapter, &inbound.HTTPServerOptions{
-		Version:        "0.2.0",
+	httpSrv, err := inbound.NewHTTPServer(listener, publisher, controller, &inbound.HTTPServerOptions{
+		Version:        buildinfo.Version,
 		PublicMode:     resolved.PublicMode,
 		PublicURL:      resolved.PublicURL,
 		AllowedHosts:   resolved.AllowedHosts,
@@ -627,6 +370,7 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	endpoint := fs.String("endpoint", "http://127.0.0.1:8080", "Hub base URL")
+	token := fs.String("token", "", "Bearer token for a public Hub (or MCP_HUB_TOKEN)")
 	asJSON := fs.Bool("json", false, "Output status as JSON")
 
 	if err := fs.Parse(args); err != nil {
@@ -639,7 +383,7 @@ func runStatus(args []string, stdout, stderr io.Writer) int {
 	}
 	statusURL := baseURL + "/api/v1/status"
 
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := newHubHTTPClient(hubToken(*token), 5*time.Second)
 	resp, err := client.Get(statusURL)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: failed to connect to Hub at %s: %v\n", statusURL, err)
@@ -705,6 +449,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	endpoint := fs.String("endpoint", "http://127.0.0.1:8080", "Hub base URL")
+	token := fs.String("token", "", "Bearer token for a public Hub (or MCP_HUB_TOKEN)")
 
 	if err := fs.Parse(args); err != nil {
 		return ExitInvalidParams
@@ -718,7 +463,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	healthURL := baseURL + "/healthz"
 	readyURL := baseURL + "/readyz"
 
-	httpClient := &http.Client{Timeout: 5 * time.Second}
+	httpClient := newHubHTTPClient(hubToken(*token), 5*time.Second)
 
 	// 1. Health check
 	hResp, err := httpClient.Get(healthURL)
@@ -751,7 +496,11 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	defer cancel()
 
 	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "mcp-hub-doctor", Version: "1.0.0"}, nil)
-	transport := &mcp.StreamableClientTransport{Endpoint: mcpURL}
+	transport := &mcp.StreamableClientTransport{
+		Endpoint:             mcpURL,
+		HTTPClient:           newHubHTTPClient(hubToken(*token), 10*time.Second),
+		DisableStandaloneSSE: true,
+	}
 
 	session, err := mcpClient.Connect(ctx, transport, nil)
 	if err != nil {

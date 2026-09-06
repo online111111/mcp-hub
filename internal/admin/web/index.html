@@ -1,123 +1,456 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="light">
-  <title>MCP Hub 管理台</title>
-  <link rel="stylesheet" href="/admin/app.css?v=20260906-ux2">
-</head>
-<body>
-  <div id="toastStack" class="toast-stack" aria-live="polite"></div>
-  <main class="page-shell">
-    <header class="topbar">
-      <div class="brand-block">
-        <div class="brand-mark">M</div>
-        <div><div class="brand-line"><h1>MCP Hub</h1><span class="brand-tag">ADMIN</span></div><p>集中管理你的 MCP 服务、工具与客户端接入。</p></div>
-      </div>
-      <div id="topActions" class="top-actions hidden">
-        <span id="headerHealth" class="status-pill neutral"><span class="status-dot"></span>检查中</span>
-        <button id="refreshTop" class="button secondary" type="button">刷新</button>
-        <button id="logout" class="button quiet" type="button">退出</button>
-      </div>
-    </header>
-
-    <section id="login" class="login-wrap">
-      <article class="login-card">
-        <div class="login-copy"><span class="kicker">SECURE ADMIN</span><h2>进入管理台</h2><p>使用部署时设置的 Admin Token 登录。Token 只用于建立当前浏览器会话，不会保存在页面中。</p></div>
-        <form id="loginForm" class="login-form">
-          <label class="field-label" for="token">Admin Token</label>
-          <div class="password-wrap"><input id="token" type="password" autocomplete="current-password" placeholder="粘贴管理员 Token" required autofocus><button id="togglePassword" class="inside-button" type="button">显示</button></div>
-          <button id="loginButton" class="button primary large" type="submit">进入管理台</button>
-          <p id="loginError" class="form-error" role="alert"></p>
-        </form>
-      </article>
-    </section>
-
-    <section id="app" class="app-layout hidden">
-      <aside class="sidebar">
-        <nav class="side-nav" aria-label="管理台导航">
-          <button class="nav-item active" data-section="overview" type="button"><span>概览</span><small>状态与服务</small></button>
-          <button class="nav-item" data-section="serversSection" type="button"><span>服务</span><small>下游 MCP</small></button>
-          <button class="nav-item" data-section="callsSection" type="button"><span>调用</span><small>最近记录</small></button>
-          <button class="nav-item" data-section="connectSection" type="button"><span>接入</span><small>客户端配置</small></button>
-        </nav>
-        <div class="sidebar-meta"><span>版本</span><strong id="hubVersion">—</strong><span>运行时间</span><strong id="hubUptime">—</strong></div>
-      </aside>
-
-      <div class="content">
-        <section id="overview" class="section-block">
-          <div class="section-heading hero-heading">
-            <div><span class="kicker">OVERVIEW</span><h2>运行概览</h2><p id="lastReload">正在读取 Hub 状态…</p></div>
-            <button id="addServerHero" class="button primary" type="button">+ 添加 MCP 服务</button>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>MCP Hub 管理台</title>
+    <link rel="stylesheet" href="/admin/app.css?v=20260906-v03" />
+  </head>
+  <body>
+    <div id="toastStack" class="toast-stack" aria-live="polite"></div>
+    <main class="page-shell">
+      <header class="topbar">
+        <div class="brand-block">
+          <div class="brand-mark">M</div>
+          <div>
+            <div class="brand-line">
+              <h1>MCP Hub</h1>
+              <span class="brand-tag">ADMIN</span>
+            </div>
+            <p>集中管理你的 MCP 服务、工具与客户端接入。</p>
           </div>
-          <div class="stats-grid">
-            <article class="stat-card"><span class="stat-label">Hub 状态</span><strong id="health">—</strong><small id="healthDetail">等待状态</small></article>
-            <article class="stat-card"><span class="stat-label">下游服务</span><strong id="serverCount">0</strong><small id="serverReadyCount">0 个可用</small></article>
-            <article class="stat-card"><span class="stat-label">公开工具</span><strong id="toolCount">0</strong><small id="activeCallCount">0 个正在调用</small></article>
-            <article class="stat-card"><span class="stat-label">最近调用</span><strong id="callCount">0</strong><small id="successRate">暂无数据</small></article>
-          </div>
-        </section>
+        </div>
+        <div id="topActions" class="top-actions hidden">
+          <span id="headerHealth" class="status-pill neutral"
+            ><span class="status-dot"></span>检查中</span
+          >
+          <button id="refreshTop" class="button secondary" type="button">
+            刷新
+          </button>
+          <button id="logout" class="button quiet" type="button">退出</button>
+        </div>
+      </header>
 
-        <section id="serversSection" class="panel section-block">
-          <div class="section-heading">
-            <div><span class="kicker">DOWNSTREAMS</span><h2>下游 MCP 服务</h2><p>直接用表单添加或编辑，不需要手写整段 JSON。保存后会原子写入并热重载。</p></div>
-            <div class="heading-actions"><span id="serverSummary" class="muted-inline">0 个服务</span><button id="addServer" class="button primary" type="button">+ 添加服务</button></div>
+      <section id="login" class="login-wrap">
+        <article class="login-card">
+          <div class="login-copy">
+            <span class="kicker">SECURE ADMIN</span>
+            <h2>进入管理台</h2>
+            <p>
+              使用部署时设置的 Admin Token 登录。Token
+              只用于建立当前浏览器会话，不会保存在页面中。
+            </p>
           </div>
-          <div id="servers" class="server-list"></div>
-        </section>
+          <form id="loginForm" class="login-form">
+            <label class="field-label" for="token">Admin Token</label>
+            <div class="password-wrap">
+              <input
+                id="token"
+                type="password"
+                autocomplete="current-password"
+                placeholder="粘贴管理员 Token"
+                required
+                autofocus
+              /><button id="togglePassword" class="inside-button" type="button">
+                显示
+              </button>
+            </div>
+            <button id="loginButton" class="button primary large" type="submit">
+              进入管理台
+            </button>
+            <p id="loginError" class="form-error" role="alert"></p>
+          </form>
+        </article>
+      </section>
 
-        <section id="callsSection" class="panel section-block">
-          <div class="section-heading calls-heading">
-            <div><span class="kicker">ACTIVITY</span><h2>最近调用</h2><p>仅显示脱敏后的工具、服务、结果和耗时。</p></div>
-            <button id="refresh" class="button secondary" type="button">刷新记录</button>
+      <section id="app" class="app-layout hidden">
+        <aside class="sidebar">
+          <nav class="side-nav" aria-label="管理台导航">
+            <button
+              class="nav-item active"
+              data-section="overview"
+              type="button"
+            >
+              <span>概览</span><small>状态与服务</small>
+            </button>
+            <button
+              class="nav-item"
+              data-section="serversSection"
+              type="button"
+            >
+              <span>服务</span><small>下游 MCP</small>
+            </button>
+            <button class="nav-item" data-section="callsSection" type="button">
+              <span>调用</span><small>最近记录</small>
+            </button>
+            <button
+              class="nav-item"
+              data-section="connectSection"
+              type="button"
+            >
+              <span>接入</span><small>客户端配置</small>
+            </button>
+          </nav>
+          <div class="sidebar-meta">
+            <span>版本</span><strong id="hubVersion">—</strong
+            ><span>运行时间</span><strong id="hubUptime">—</strong>
           </div>
-          <div class="call-toolbar"><input id="callSearch" type="search" placeholder="搜索工具或服务…"><select id="callOutcome"><option value="all">全部结果</option><option value="success">仅成功</option><option value="error">仅失败</option></select></div>
-          <div class="table-wrap"><table class="call-table"><thead><tr><th>工具</th><th>服务</th><th>结果</th><th>耗时</th><th>时间</th></tr></thead><tbody id="calls"></tbody></table></div>
-          <div id="callsEmpty" class="empty-state hidden"><strong>没有匹配的调用记录</strong><p>调整筛选条件或稍后刷新。</p></div>
-        </section>
+        </aside>
 
-        <section id="connectSection" class="panel section-block">
-          <div class="section-heading"><div><span class="kicker">CLIENT ACCESS</span><h2>客户端接入</h2><p>公网入口统一走 HTTPS。MCP Bearer Token 不会在管理网页中回显。</p></div></div>
-          <div class="connection-grid">
-            <article class="connection-card"><div class="connection-title"><div><span class="mini-label">推荐</span><h3>Streamable HTTP</h3></div><button class="button tiny secondary copy-button" data-copy-target="mcpEndpoint" type="button">复制地址</button></div><code id="mcpEndpoint"></code><p>适用于原生支持远程 MCP 的客户端和 Agent。</p></article>
-            <article class="connection-card"><div class="connection-title"><div><span class="mini-label">兼容</span><h3>stdio bridge</h3></div><button class="button tiny secondary copy-button" data-copy-target="stdioCommand" type="button">复制命令</button></div><code id="stdioCommand"></code><p>适用于只接受本地 stdio MCP 的客户端。</p></article>
+        <div class="content">
+          <section id="overview" class="section-block">
+            <div class="section-heading hero-heading">
+              <div>
+                <span class="kicker">OVERVIEW</span>
+                <h2>运行概览</h2>
+                <p id="lastReload">正在读取 Hub 状态…</p>
+              </div>
+              <button id="addServerHero" class="button primary" type="button">
+                + 添加 MCP 服务
+              </button>
+            </div>
+            <div class="stats-grid">
+              <article class="stat-card">
+                <span class="stat-label">Hub 状态</span
+                ><strong id="health">—</strong
+                ><small id="healthDetail">等待状态</small>
+              </article>
+              <article class="stat-card">
+                <span class="stat-label">下游服务</span
+                ><strong id="serverCount">0</strong
+                ><small id="serverReadyCount">0 个可用</small>
+              </article>
+              <article class="stat-card">
+                <span class="stat-label">公开工具</span
+                ><strong id="toolCount">0</strong
+                ><small id="activeCallCount">0 个正在调用</small>
+              </article>
+              <article class="stat-card">
+                <span class="stat-label">最近调用</span
+                ><strong id="callCount">0</strong
+                ><small id="successRate">暂无数据</small>
+              </article>
+            </div>
+          </section>
+
+          <section id="serversSection" class="panel section-block">
+            <div class="section-heading">
+              <div>
+                <span class="kicker">DOWNSTREAMS</span>
+                <h2>下游 MCP 服务</h2>
+                <p>
+                  直接用表单添加或编辑，不需要手写整段
+                  JSON。保存后会原子写入并热重载。
+                </p>
+              </div>
+              <div class="heading-actions">
+                <span id="serverSummary" class="muted-inline">0 个服务</span
+                ><button id="addServer" class="button primary" type="button">
+                  + 添加服务
+                </button>
+              </div>
+            </div>
+            <div id="servers" class="server-list"></div>
+          </section>
+
+          <section id="callsSection" class="panel section-block">
+            <div class="section-heading calls-heading">
+              <div>
+                <span class="kicker">ACTIVITY</span>
+                <h2>最近调用</h2>
+                <p>仅显示脱敏后的工具、服务、结果和耗时。</p>
+              </div>
+              <button id="refresh" class="button secondary" type="button">
+                刷新记录
+              </button>
+            </div>
+            <div class="call-toolbar">
+              <input
+                id="callSearch"
+                type="search"
+                placeholder="搜索工具或服务…"
+              /><select id="callOutcome">
+                <option value="all">全部结果</option>
+                <option value="success">仅成功</option>
+                <option value="error">仅失败</option>
+              </select>
+            </div>
+            <div class="table-wrap">
+              <table class="call-table">
+                <thead>
+                  <tr>
+                    <th>工具</th>
+                    <th>服务</th>
+                    <th>结果</th>
+                    <th>耗时</th>
+                    <th>时间</th>
+                  </tr>
+                </thead>
+                <tbody id="calls"></tbody>
+              </table>
+            </div>
+            <div id="callsEmpty" class="empty-state hidden">
+              <strong>没有匹配的调用记录</strong>
+              <p>调整筛选条件或稍后刷新。</p>
+            </div>
+          </section>
+
+          <section id="connectSection" class="panel section-block">
+            <div class="section-heading">
+              <div>
+                <span class="kicker">CLIENT ACCESS</span>
+                <h2>客户端接入</h2>
+                <p>
+                  公网入口统一走 HTTPS。MCP Bearer Token 不会在管理网页中回显。
+                </p>
+              </div>
+            </div>
+            <div class="connection-grid">
+              <article class="connection-card">
+                <div class="connection-title">
+                  <div>
+                    <span class="mini-label">推荐</span>
+                    <h3>Streamable HTTP</h3>
+                  </div>
+                  <button
+                    class="button tiny secondary copy-button"
+                    data-copy-target="mcpEndpoint"
+                    type="button"
+                  >
+                    复制地址
+                  </button>
+                </div>
+                <code id="mcpEndpoint"></code>
+                <p>适用于原生支持远程 MCP 的客户端和 Agent。</p>
+              </article>
+              <article class="connection-card">
+                <div class="connection-title">
+                  <div>
+                    <span class="mini-label">兼容</span>
+                    <h3>stdio bridge</h3>
+                  </div>
+                  <button
+                    class="button tiny secondary copy-button"
+                    data-copy-target="stdioCommand"
+                    type="button"
+                  >
+                    复制命令
+                  </button>
+                </div>
+                <code id="stdioCommand"></code>
+                <p>适用于只接受本地 stdio MCP 的客户端。</p>
+              </article>
+            </div>
+            <div class="notice info">
+              <strong>认证提示</strong
+              ><span
+                >客户端连接需要 MCP Bearer Token；管理员登录使用的是另一枚 Admin
+                Token，两者不要混用。</span
+              >
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="editor" class="editor-dialog">
+      <form id="serverForm" method="dialog">
+        <div class="dialog-head">
+          <div>
+            <span class="kicker">SERVER EDITOR</span>
+            <h2 id="editorTitle">添加 MCP 服务</h2>
+            <p id="editorSubtitle">填写常用字段即可，高级 JSON 可选。</p>
           </div>
-          <div class="notice info"><strong>认证提示</strong><span>客户端连接需要 MCP Bearer Token；管理员登录使用的是另一枚 Admin Token，两者不要混用。</span></div>
-        </section>
-      </div>
-    </section>
-  </main>
-
-  <dialog id="editor" class="editor-dialog">
-    <form id="serverForm" method="dialog">
-      <div class="dialog-head"><div><span class="kicker">SERVER EDITOR</span><h2 id="editorTitle">添加 MCP 服务</h2><p id="editorSubtitle">填写常用字段即可，高级 JSON 可选。</p></div><button id="closeEditor" class="icon-button" type="button" aria-label="关闭">×</button></div>
-      <div class="editor-tabs"><button id="formTab" class="editor-tab active" type="button">表单模式</button><button id="jsonTab" class="editor-tab" type="button">高级 JSON</button></div>
-      <div id="formEditor" class="editor-body">
-        <section class="form-section">
-          <div class="form-section-title"><h3>基本信息</h3><p>服务 ID 保存后不可修改。</p></div>
-          <div class="form-grid two"><label class="field"><span>服务 ID</span><input id="serverId" placeholder="例如 filesystem" required pattern="[a-z][a-z0-9_-]{0,31}"><small>小写字母开头，可用数字、_、-</small></label><label class="field"><span>连接类型</span><select id="serverType"><option value="stdio">stdio · 本地进程</option><option value="streamable_http">Streamable HTTP · 远程服务</option></select><small>根据 MCP 服务提供方选择</small></label></div>
-          <label class="switch-row"><span><strong>启用这个服务</strong><small>关闭后保留配置，但不会启动或发布工具。</small></span><input id="enabled" type="checkbox" checked><i></i></label>
-        </section>
-        <section id="stdioFields" class="form-section transport-section">
-          <div class="form-section-title"><h3>stdio 启动设置</h3><p>Hub 会作为子进程启动这个 MCP 服务。</p></div>
-          <label class="field"><span>命令</span><input id="command" placeholder="例如 /usr/bin/node 或 npx"><small>推荐使用绝对路径，避免不同运行环境下 PATH 不一致。</small></label>
-          <label class="field"><span>参数</span><textarea id="args" rows="4" placeholder="每行一个参数，例如：&#10;-y&#10;@modelcontextprotocol/server-memory"></textarea><small>每行会作为一个独立参数传给进程，不需要额外加引号。</small></label>
-          <label class="field"><span>工作目录</span><input id="cwd" placeholder="例如 /var/lib/mcp-hub"><small>留空时使用配置文件所在目录。</small></label>
-          <div class="kv-block"><div class="kv-head"><div><strong>环境变量</strong><small>Secret 已设置时不会回显，留空即可保留原值。</small></div><button id="addEnv" class="button tiny secondary" type="button">+ 添加变量</button></div><div id="envRows" class="kv-rows"></div></div>
-        </section>
-        <section id="httpFields" class="form-section transport-section hidden">
-          <div class="form-section-title"><h3>远程 HTTP 设置</h3><p>Hub 会作为 MCP Client 连接远端 Streamable HTTP 服务。</p></div>
-          <label class="field"><span>MCP URL</span><input id="remoteUrl" type="url" placeholder="https://example.com/mcp"><small>公网远程服务建议使用 HTTPS。</small></label>
-          <div class="kv-block"><div class="kv-head"><div><strong>请求 Headers</strong><small>Authorization 等敏感值已设置时不会回显。</small></div><button id="addHeader" class="button tiny secondary" type="button">+ 添加 Header</button></div><div id="headerRows" class="kv-rows"></div></div>
-        </section>
-        <details class="advanced-details"><summary>高级运行设置</summary><div class="advanced-content"><div class="form-grid three"><label class="field"><span>启动超时</span><input id="startupTimeout" placeholder="例如 20s"><small>留空继承全局值</small></label><label class="field"><span>调用超时</span><input id="callTimeout" placeholder="例如 60s"><small>留空继承全局值</small></label><label class="field"><span>最大并发</span><input id="maxConcurrency" type="number" min="1" max="64" placeholder="继承"><small>范围 1–64</small></label></div><label class="field"><span>禁用工具</span><textarea id="disabledTools" rows="4" placeholder="每行一个工具原始名称"></textarea><small>这些工具不会被发布到 Hub 目录。</small></label></div></details>
-      </div>
-      <div id="jsonEditor" class="editor-body hidden"><div class="json-warning"><strong>高级模式</strong><span>这里编辑的是单个服务配置。格式错误或字段不合法会被服务端拒绝，不会写坏现有配置。</span></div><label class="field"><span>服务 JSON</span><textarea id="serverJSON" class="code-editor" rows="24" spellcheck="false"></textarea></label></div>
-      <p id="editorError" class="form-error dialog-error" role="alert"></p>
-      <div class="dialog-actions"><button id="cancelEditor" class="button secondary" type="button">取消</button><button id="saveServer" class="button primary" type="submit">保存并热重载</button></div>
-    </form>
-  </dialog>
-  <script src="/admin/app.js?v=20260906-ux2" defer></script>
-</body>
+          <button
+            id="closeEditor"
+            class="icon-button"
+            type="button"
+            aria-label="关闭"
+          >
+            ×
+          </button>
+        </div>
+        <div class="editor-tabs">
+          <button id="formTab" class="editor-tab active" type="button">
+            表单模式</button
+          ><button id="jsonTab" class="editor-tab" type="button">
+            高级 JSON
+          </button>
+        </div>
+        <div id="formEditor" class="editor-body">
+          <section class="form-section">
+            <div class="form-section-title">
+              <h3>基本信息</h3>
+              <p>服务 ID 保存后不可修改。</p>
+            </div>
+            <div class="form-grid two">
+              <label class="field"
+                ><span>服务 ID</span
+                ><input
+                  id="serverId"
+                  placeholder="例如 filesystem"
+                  required
+                  pattern="[a-z][a-z0-9_-]{0,31}"
+                /><small>小写字母开头，可用数字、_、-</small></label
+              ><label class="field"
+                ><span>连接类型</span
+                ><select id="serverType">
+                  <option value="stdio">stdio · 本地进程</option>
+                  <option value="streamable_http">
+                    Streamable HTTP · 远程服务
+                  </option></select
+                ><small>根据 MCP 服务提供方选择</small></label
+              >
+            </div>
+            <label class="switch-row"
+              ><span
+                ><strong>启用这个服务</strong
+                ><small>关闭后保留配置，但不会启动或发布工具。</small></span
+              ><input id="enabled" type="checkbox" checked /><i></i
+            ></label>
+          </section>
+          <section id="stdioFields" class="form-section transport-section">
+            <div class="form-section-title">
+              <h3>stdio 启动设置</h3>
+              <p>Hub 会作为子进程启动这个 MCP 服务。</p>
+            </div>
+            <label class="field"
+              ><span>命令</span
+              ><input
+                id="command"
+                placeholder="例如 /usr/bin/node 或 npx"
+              /><small
+                >推荐使用绝对路径，避免不同运行环境下 PATH 不一致。</small
+              ></label
+            >
+            <label class="field"
+              ><span>参数</span
+              ><textarea
+                id="args"
+                rows="4"
+                placeholder="每行一个参数，例如：&#10;-y&#10;@modelcontextprotocol/server-memory"
+              ></textarea
+              ><small
+                >每行会作为一个独立参数传给进程，不需要额外加引号。</small
+              ></label
+            >
+            <label class="field"
+              ><span>工作目录</span
+              ><input id="cwd" placeholder="例如 /var/lib/mcp-hub" /><small
+                >留空时使用配置文件所在目录。</small
+              ></label
+            >
+            <div class="kv-block">
+              <div class="kv-head">
+                <div>
+                  <strong>环境变量</strong
+                  ><small>Secret 已设置时不会回显，留空即可保留原值。</small>
+                </div>
+                <button id="addEnv" class="button tiny secondary" type="button">
+                  + 添加变量
+                </button>
+              </div>
+              <div id="envRows" class="kv-rows"></div>
+            </div>
+          </section>
+          <section
+            id="httpFields"
+            class="form-section transport-section hidden"
+          >
+            <div class="form-section-title">
+              <h3>远程 HTTP 设置</h3>
+              <p>Hub 会作为 MCP Client 连接远端 Streamable HTTP 服务。</p>
+            </div>
+            <label class="field"
+              ><span>MCP URL</span
+              ><input
+                id="remoteUrl"
+                type="url"
+                placeholder="https://example.com/mcp"
+              /><small>公网远程服务建议使用 HTTPS。</small></label
+            >
+            <div class="kv-block">
+              <div class="kv-head">
+                <div>
+                  <strong>请求 Headers</strong
+                  ><small>Authorization 等敏感值已设置时不会回显。</small>
+                </div>
+                <button
+                  id="addHeader"
+                  class="button tiny secondary"
+                  type="button"
+                >
+                  + 添加 Header
+                </button>
+              </div>
+              <div id="headerRows" class="kv-rows"></div>
+            </div>
+          </section>
+          <details class="advanced-details">
+            <summary>高级运行设置</summary>
+            <div class="advanced-content">
+              <div class="form-grid three">
+                <label class="field"
+                  ><span>启动超时</span
+                  ><input id="startupTimeout" placeholder="例如 20s" /><small
+                    >留空继承全局值</small
+                  ></label
+                ><label class="field"
+                  ><span>调用超时</span
+                  ><input id="callTimeout" placeholder="例如 60s" /><small
+                    >留空继承全局值</small
+                  ></label
+                ><label class="field"
+                  ><span>最大并发</span
+                  ><input
+                    id="maxConcurrency"
+                    type="number"
+                    min="1"
+                    max="64"
+                    placeholder="继承"
+                  /><small>范围 1–64</small></label
+                >
+              </div>
+              <label class="field"
+                ><span>禁用工具</span
+                ><textarea
+                  id="disabledTools"
+                  rows="4"
+                  placeholder="每行一个工具原始名称"
+                ></textarea
+                ><small>这些工具不会被发布到 Hub 目录。</small></label
+              >
+            </div>
+          </details>
+        </div>
+        <div id="jsonEditor" class="editor-body hidden">
+          <div class="json-warning">
+            <strong>高级模式</strong
+            ><span
+              >这里编辑的是单个服务配置。格式错误或字段不合法会被服务端拒绝，不会写坏现有配置。</span
+            >
+          </div>
+          <label class="field"
+            ><span>服务 JSON</span
+            ><textarea
+              id="serverJSON"
+              class="code-editor"
+              rows="24"
+              spellcheck="false"
+            ></textarea>
+          </label>
+        </div>
+        <p id="editorError" class="form-error dialog-error" role="alert"></p>
+        <div class="dialog-actions">
+          <button id="cancelEditor" class="button secondary" type="button">
+            取消</button
+          ><button id="saveServer" class="button primary" type="submit">
+            保存并热重载
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <script type="module" src="/admin/app.js?v=20260906-v03"></script>
+  </body>
 </html>

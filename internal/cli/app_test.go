@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"mcp-hub/internal/inbound"
-	"mcp-hub/internal/manager"
 )
 
 func TestCLI_Validate(t *testing.T) {
@@ -230,25 +229,6 @@ func TestCLI_StatusAndDoctor(t *testing.T) {
 	}
 }
 
-func TestHubManagerAdapterRecentCalls(t *testing.T) {
-	mgr := manager.NewManager(nil)
-	want := inbound.RecentCallDTO{
-		RequestID:  "req-adapter",
-		Time:       "2026-09-06T00:00:00Z",
-		DurationMs: 7,
-		Tool:       "srv__tool",
-		ServerID:   "srv",
-		Outcome:    "success",
-	}
-	mgr.RecordCall(want)
-
-	adapter := NewHubManagerAdapter(mgr, "config.json", "127.0.0.1:8080", 0)
-	got := adapter.GetRecentCalls()
-	if len(got) != 1 || got[0] != want {
-		t.Fatalf("unexpected adapter recent calls: %+v", got)
-	}
-}
-
 func TestCLI_UnknownCommand(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"unknown-cmd"}, &stdout, &stderr)
@@ -257,6 +237,16 @@ func TestCLI_UnknownCommand(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "unknown command") {
 		t.Errorf("expected unknown command message, got: %s", stderr.String())
+	}
+}
+
+func TestCLI_Version(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"version"}, &stdout, &stderr); code != ExitSuccess {
+		t.Fatalf("version exited with %d: %s", code, stderr.String())
+	}
+	if got := strings.TrimSpace(stdout.String()); got != "mcp-hub 0.3.0" {
+		t.Fatalf("unexpected version output %q", got)
 	}
 }
 

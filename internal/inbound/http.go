@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"mcp-hub/internal/buildinfo"
 )
 
 const (
@@ -211,7 +212,7 @@ func NewHTTPServer(listener net.Listener, publisher *Publisher, manager ManagerC
 		return nil, fmt.Errorf("failed to determine listener address: %w", err)
 	}
 
-	version := "0.1.0"
+	version := buildinfo.Version
 	sessionTimeout := DefaultSessionTimeout
 	maxSessions := MaxHTTPSessions
 	maxBodySize := int64(MaxBodySize)

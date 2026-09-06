@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -10,6 +11,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -28,6 +30,8 @@ const (
 	localCookieName  = "mcphub_admin"
 	secretSentinel   = "__MCP_HUB_SECRET_SET__"
 	maxAdminSessions = 16
+	maxLoginWindows  = 4096
+	maxAdminBodySize = 1024 * 1024
 )
 
 //go:embed web/*
@@ -158,7 +162,8 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isMutation(r.Method) {
-		if r.Header.Get("Content-Type") != "application/json" && !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json;") {
+		mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+		if err != nil || mediaType != "application/json" {
 			http.Error(w, "application/json required", http.StatusUnsupportedMediaType)
 			return
 		}
@@ -226,8 +231,16 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
-	sid := randomToken()
-	csrf := randomToken()
+	sid, err := randomToken()
+	if err != nil {
+		http.Error(w, "session initialization failed", http.StatusInternalServerError)
+		return
+	}
+	csrf, err := randomToken()
+	if err != nil {
+		http.Error(w, "session initialization failed", http.StatusInternalServerError)
+		return
+	}
 	now := time.Now()
 	h.mu.Lock()
 	h.pruneLocked(now)
@@ -339,6 +352,15 @@ func (h *Handler) writeConfig(w http.ResponseWriter, r *http.Request, cfg *confi
 		return
 	}
 	data = append(data, '\n')
+	previous, err := os.ReadFile(h.opts.ConfigPath)
+	if err != nil {
+		http.Error(w, "configuration unavailable", http.StatusInternalServerError)
+		return
+	}
+	if config.ComputeDigest(previous) != digest {
+		http.Error(w, "configuration changed", http.StatusConflict)
+		return
+	}
 	if err := config.WriteConfigFileAtomic(h.opts.ConfigPath, data, digest); err != nil {
 		var mismatch config.ErrDigestMismatch
 		if errors.As(err, &mismatch) {
@@ -348,16 +370,27 @@ func (h *Handler) writeConfig(w http.ResponseWriter, r *http.Request, cfg *confi
 		http.Error(w, "configuration write failed", http.StatusInternalServerError)
 		return
 	}
+	newDigest := config.ComputeDigest(data)
 	if h.opts.Reload != nil {
 		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 		err = h.opts.Reload(ctx)
 		cancel()
 		if err != nil {
-			http.Error(w, "configuration saved but reload failed", http.StatusServiceUnavailable)
+			if rollbackErr := config.WriteConfigFileAtomic(h.opts.ConfigPath, previous, newDigest); rollbackErr != nil {
+				http.Error(w, "configuration reload failed and rollback could not be completed", http.StatusInternalServerError)
+				return
+			}
+			restoreCtx, restoreCancel := context.WithTimeout(context.Background(), 15*time.Second)
+			restoreErr := h.opts.Reload(restoreCtx)
+			restoreCancel()
+			if restoreErr != nil {
+				http.Error(w, "configuration change was rolled back but runtime restoration failed", http.StatusServiceUnavailable)
+				return
+			}
+			http.Error(w, "configuration reload failed; change was rolled back", http.StatusServiceUnavailable)
 			return
 		}
 	}
-	newDigest := config.ComputeDigest(data)
 	w.Header().Set("ETag", `"`+newDigest+`"`)
 	h.writeJSON(w, http.StatusOK, map[string]any{"ok": true, "digest": newDigest})
 }
@@ -423,10 +456,15 @@ func (h *Handler) validOrigin(r *http.Request) bool {
 	if origin == "" {
 		return true
 	}
-	if h.origin == "" {
-		return false
+	expected := h.origin
+	if expected == "" {
+		scheme := "http"
+		if h.isHTTPS(r) {
+			scheme = "https"
+		}
+		expected = scheme + "://" + r.Host
 	}
-	return subtle.ConstantTimeCompare([]byte(strings.TrimRight(origin, "/")), []byte(h.origin)) == 1
+	return subtle.ConstantTimeCompare([]byte(strings.TrimRight(origin, "/")), []byte(expected)) == 1
 }
 
 func (h *Handler) isHTTPS(r *http.Request) bool {
@@ -496,7 +534,15 @@ func (h *Handler) allowLogin(ip string) bool {
 	now := time.Now()
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	for candidate, window := range h.loginLimit {
+		if now.Sub(window.started) > 15*time.Minute {
+			delete(h.loginLimit, candidate)
+		}
+	}
 	window := h.loginLimit[ip]
+	if window.started.IsZero() && len(h.loginLimit) >= maxLoginWindows {
+		return false
+	}
 	if window.started.IsZero() || now.Sub(window.started) > 15*time.Minute {
 		window = loginWindow{started: now}
 	}
@@ -545,21 +591,38 @@ func (h *Handler) securityHeaders(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-store")
 }
 
-func randomToken() string {
+func randomToken() (string, error) {
 	var b [32]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		panic(err)
+		return "", err
 	}
-	return base64.RawURLEncoding.EncodeToString(b[:])
+	return base64.RawURLEncoding.EncodeToString(b[:]), nil
 }
 
 func decodeJSONBody(r *http.Request, target any) error {
 	if r.Body == nil {
 		return io.EOF
 	}
-	dec := json.NewDecoder(io.LimitReader(r.Body, 1024*1024))
+	data, err := io.ReadAll(io.LimitReader(r.Body, maxAdminBodySize+1))
+	if err != nil {
+		return err
+	}
+	if len(data) > maxAdminBodySize {
+		return errors.New("request body exceeds 1 MiB")
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
-	return dec.Decode(target)
+	if err := dec.Decode(target); err != nil {
+		return err
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return errors.New("request body must contain exactly one JSON value")
+		}
+		return err
+	}
+	return nil
 }
 
 func matchETag(raw, digest string) bool {

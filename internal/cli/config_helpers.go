@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"mcp-hub/internal/config"
@@ -12,27 +11,7 @@ import (
 // ValidateConfig reads, strictly parses, validates and resolves a configuration file from disk.
 // It never starts child processes or performs network calls.
 func ValidateConfig(configPath string) (*config.Config, *config.ResolvedConfig, error) {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read config file %q: %w", configPath, err)
-	}
-
-	var cfg config.Config
-	if err := config.DecodeStrict(data, &cfg); err != nil {
-		return nil, nil, fmt.Errorf("strict decode failed: %w", err)
-	}
-
-	if err := config.Validate(&cfg); err != nil {
-		return nil, nil, fmt.Errorf("validation failed: %w", err)
-	}
-
-	configDir := filepath.Dir(configPath)
-	resolved, err := config.Resolve(&cfg, configDir, os.LookupEnv)
-	if err != nil {
-		return &cfg, nil, fmt.Errorf("environment resolution failed: %w", err)
-	}
-
-	return &cfg, resolved, nil
+	return config.LoadFile(configPath)
 }
 
 // RunImport performs an import from a source configuration file into a target configuration file.
