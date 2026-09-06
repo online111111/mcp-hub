@@ -1,6 +1,6 @@
 # MCP Hub Implementation Status
 
-Last updated: 2026-09-06 (independent acceptance audit and remediation on Windows amd64)
+Last updated: 2026-09-06 (independent acceptance audit on Windows amd64 plus native Debian 12 amd64 verification)
 
 Status values: `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `FAIL`, `NOT_RUN`.
 
@@ -15,7 +15,7 @@ Status values: `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `FAIL`, `NOT_RUN`.
 | T07 inbound HTTP/capacity/security | PASS | `internal/inbound/http.go`; loopback bind, stateful MCP, session/body limits, Host/Origin protection, hard capacity bounds and sanitized diagnostics pass under race |
 | T08 stdio bridge | PASS | `internal/bridge`; three-hop forwarding, shared Hub, raw calls, dynamic directory sync, two-hop cancellation, Hub failure exit and stdout purity pass; bridge stress `go test -race -count=20 ./internal/bridge/...` PASS |
 | T09 hot reload/diagnostics/complete CLI | PASS | Reload loop applies only changed content after two stable samples, keeps prior runtime on invalid config, flags listen changes as restart-required, records bounded recent-call summaries through the production adapter, and wires serve/stdio/validate/import/export/status/doctor |
-| T10 full tests/build/release | PASS* | Root ordinary/race tests and vet pass; SDK probe ordinary/race pass; Go 1.26.6 `govulncheck ./...` reports no vulnerabilities; release binary and SHA-256 published. Cross-platform CI and real client matrix remain NOT_RUN. |
+| T10 full tests/build/release | PASS* | Windows release checks pass; native Debian 12 amd64 root ordinary/race tests, vet, SDK probe race test, build, HTTP/MCP smoke test, and POSIX descendant-cleanup tests pass with Go 1.26.6. GitHub Actions now covers Ubuntu and Windows; real GUI client matrix remains NOT_RUN. |
 
 `*` means automated Windows release checks pass; this does not mean every manual client or OS compatibility check is complete.
 
@@ -59,11 +59,11 @@ A final reliability pass also made generation shutdown cancel in-flight downstre
 
 The single binary now embeds a responsive `/admin/` management page with authenticated status viewing and atomic server add/edit/delete operations. Public mode is explicit and fail-closed: it requires an HTTPS public URL, Host allowlist, MCP bearer token, separate admin token, and trusted-proxy CIDRs. The HTTP layer requires TLS or a trusted proxy's `X-Forwarded-Proto: https`, protects public MCP/diagnostic endpoints with bearer authentication, and keeps browser requests confined to the admin origin. The admin plane adds bounded random sessions, Secure/HttpOnly/SameSite cookies, synchronizer CSRF tokens, JSON-only mutations, login/API rate limits, secret placeholders, ETag/CAS writes, CSP and browser security headers. See `docs/VPS.md` and `config.vps.example.json`.
 
-Windows amd64 was tested natively. The Linux amd64 artifact is a successful Go 1.26.6 CGO-disabled cross-build; native Linux runtime and POSIX process-group behavior still require execution on a Linux runner before claiming native Linux acceptance.
+Windows amd64 was tested natively. Debian 12 amd64 was also tested natively on Linux with Go 1.26.6: the root ordinary/race suites, vet, nested SDK probe race test, static build, HTTP/MCP smoke test, explicit Process.Close descendant cleanup, and context-cancellation descendant cleanup all passed. The Linux verification also found and fixed a real cancellation bug where `exec.CommandContext` could kill only the direct child and leave grandchildren alive; POSIX cancellation now routes through `Process.Close` so the full process group is terminated.
 
 ## Evidence boundary and not-run checks
 
-The SDK probe is feasibility evidence only. Automated tests do not prove arbitrary third-party server behavior, malicious same-user processes, process-group escape on POSIX, or compatibility with a GUI client. Native Windows process tests were run; Linux POSIX tests and macOS builds were not run in this session and must be covered by CI before claiming cross-platform release support.
+The SDK probe is feasibility evidence only. Automated tests do not prove arbitrary third-party server behavior, malicious same-user processes, deliberate process-group escape on POSIX, or compatibility with a GUI client. Native Windows and Debian 12 amd64 process tests were run. macOS runtime remains unverified; GitHub Actions provides ongoing Ubuntu/Windows regression coverage.
 
 | Object | Status | Reason |
 |---|---|---|
@@ -71,5 +71,5 @@ The SDK probe is feasibility evidence only. Automated tests do not prove arbitra
 | Claude Desktop exact installed version | NOT_RUN | No installed client/version was supplied for manual exercise |
 | User file MCP | NOT_RUN | No user server supplied |
 | User remote MCP | NOT_RUN | No remote service/token supplied |
-| Linux CI and POSIX process-group tests | NOT_RUN | No Linux runner in this workspace |
+| Linux native runtime and POSIX process-group tests | PASS | Debian 12 amd64 native ordinary/race/vet/build/smoke checks pass; explicit close and context-cancel descendant cleanup are regression-tested |
 | macOS build/runtime | NOT_RUN | No macOS runner in this workspace |
