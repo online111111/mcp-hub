@@ -140,6 +140,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 	}
+	// Go's platform MIME database is not consistent for JavaScript modules
+	// (notably, Windows may serve .mjs as text/plain). With nosniff enabled,
+	// browsers then refuse to load the admin console.
+	if ext := strings.ToLower(path.Ext(r.URL.Path)); ext == ".js" || ext == ".mjs" {
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	}
 	h.static.ServeHTTP(w, r)
 }
 
