@@ -106,7 +106,11 @@ func startPlatform(ctx context.Context, spec Spec, opts LaunchOptions) (Process,
 		return nil, err
 	}
 
-	cmd := exec.CommandContext(ctx, resolved.Spec.Command, resolved.Spec.Args...)
+	// Do not bind exec.Cmd directly to ctx. CommandContext kills only the
+	// immediate child, which can leave descendants in the process group alive.
+	// Cancellation is handled below by Process.Close so the whole group is
+	// terminated consistently.
+	cmd := exec.Command(resolved.Spec.Command, resolved.Spec.Args...)
 	cmd.Dir = resolved.Spec.Dir
 	if len(resolved.Spec.Env) > 0 {
 		cmd.Env = resolved.Spec.Env
@@ -149,6 +153,14 @@ func startPlatform(ctx context.Context, spec Spec, opts LaunchOptions) (Process,
 
 	go func() {
 		_ = pp.waitInternal()
+	}()
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = pp.Close()
+		case <-pp.doneChan:
+		}
 	}()
 
 	return pp, nil
