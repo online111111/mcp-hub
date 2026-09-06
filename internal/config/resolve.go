@@ -87,7 +87,11 @@ func Resolve(cfg *Config, configDir string, lookupEnv func(string) (string, bool
 		Servers:             make(map[string]ResolvedServer, len(cfg.MCPServers)),
 	}
 
-	baseEnv := os.Environ()
+	// Downstream stdio servers inherit the Hub process environment for PATH and
+	// runtime discovery, but the Hub's own authentication secrets must never be
+	// inherited implicitly. A server can still receive the same value
+	// intentionally through its explicit env configuration.
+	baseEnv := filterInheritedSecrets(os.Environ(), bearerToken, adminToken)
 	isWindows := runtime.GOOS == "windows"
 
 	for id, s := range cfg.MCPServers {
@@ -125,7 +129,7 @@ func Resolve(cfg *Config, configDir string, lookupEnv func(string) (string, bool
 		case ServerTypeStdio:
 			// Resolve command path if it has directory separators
 			cmd := s.Command
-			if strings.ContainsAny(cmd, `/\`) {
+			if strings.ContainsAny(cmd, `/\\`) {
 				if !filepath.IsAbs(cmd) && configDir != "" {
 					cmd = filepath.Clean(filepath.Join(configDir, cmd))
 				}
@@ -174,4 +178,30 @@ func Resolve(cfg *Config, configDir string, lookupEnv func(string) (string, bool
 	}
 
 	return resolved, nil
+}
+
+func filterInheritedSecrets(base []string, secrets ...string) []string {
+	if len(base) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(base))
+	for _, entry := range base {
+		eq := strings.IndexByte(entry, '=')
+		if eq <= 0 {
+			out = append(out, entry)
+			continue
+		}
+		value := entry[eq+1:]
+		blocked := false
+		for _, secret := range secrets {
+			if secret != "" && value == secret {
+				blocked = true
+				break
+			}
+		}
+		if !blocked {
+			out = append(out, entry)
+		}
+	}
+	return out
 }

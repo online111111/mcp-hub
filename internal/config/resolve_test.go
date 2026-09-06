@@ -129,3 +129,40 @@ func TestResolve_EnvAndSecretExpansion(t *testing.T) {
 		t.Errorf("raw config was mutated! got %q", cfg.MCPServers["remote"].Headers["Authorization"])
 	}
 }
+
+func TestResolve_DoesNotInheritHubAuthSecretsIntoStdioEnv(t *testing.T) {
+	t.Setenv("MCP_HUB_TOKEN", "hub-mcp-secret")
+	t.Setenv("MCP_HUB_ADMIN_TOKEN", "hub-admin-secret")
+
+	cfg := &config.Config{
+		Version: 1,
+		Hub: config.HubConfig{
+			Auth: config.HubAuthConfig{BearerToken: "${MCP_HUB_TOKEN}"},
+			Admin: config.AdminConfig{Enabled: true, Token: "${MCP_HUB_ADMIN_TOKEN}"},
+		},
+		MCPServers: map[string]config.ServerConfig{
+			"local": {
+				Type:    config.ServerTypeStdio,
+				Command: "/bin/true",
+				Env: map[string]string{
+					"EXPLICIT_SHARED_SECRET": "${MCP_HUB_TOKEN}",
+				},
+			},
+		},
+	}
+
+	resolved, err := config.Resolve(cfg, "/tmp", nil)
+	if err != nil {
+		t.Fatalf("Resolve failed: %v", err)
+	}
+	env := resolved.Servers["local"].Env
+	if _, ok := env["MCP_HUB_TOKEN"]; ok {
+		t.Fatal("stdio environment inherited MCP_HUB_TOKEN")
+	}
+	if _, ok := env["MCP_HUB_ADMIN_TOKEN"]; ok {
+		t.Fatal("stdio environment inherited MCP_HUB_ADMIN_TOKEN")
+	}
+	if got := env["EXPLICIT_SHARED_SECRET"]; got != "hub-mcp-secret" {
+		t.Fatalf("explicit server env should still be allowed, got %q", got)
+	}
+}
