@@ -1,0 +1,34 @@
+# Local runtime configuration and secrets
+config.json
+*.local.json
+.env
+.env.*
+*.pem
+*.key
+*.crt
+
+# Acceptance and temporary files
+acceptance-*
+admin-smoke-config.json
+*.tmp
+*.lock
+
+# Build outputs
+/dist/*
+!/dist/SHA256SUMS.txt
+*.exe
+*.test
+
+# Go tooling
+coverage.out
+*.prof
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Unrelated workspace artifacts
+pelican-bicycle.html
+doraemon_bicycle.html

@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "hub": {
+    "listen": "127.0.0.1:8080"
+  },
+  "defaults": {
+    "startupTimeout": "20s",
+    "callTimeout": "60s",
+    "maxConcurrency": 8
+  },
+  "mcpServers": {
+    "filesystem": {
+      "enabled": true,
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "D:/data"
+      ],
+      "cwd": "D:/data",
+      "env": {
+        "NODE_ENV": "production"
+      },
+      "tools": {
+        "disabled": ["delete_file"]
+      }
+    },
+    "search": {
+      "type": "streamable_http",
+      "url": "https://example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${SEARCH_TOKEN}"
+      },
+      "callTimeout": "30s"
+    }
+  }
+}

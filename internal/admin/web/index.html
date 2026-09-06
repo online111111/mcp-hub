@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MCP Hub 管理台</title>
+  <link rel="stylesheet" href="/admin/app.css">
+</head>
+<body>
+  <main class="shell">
+    <header><div><p class="eyebrow">PERSONAL MCP GATEWAY</p><h1>MCP Hub</h1><p>集中配置、观察和管理下游 MCP 服务。</p></div><button id="logout" class="ghost hidden">退出</button></header>
+    <section id="login" class="card login"><h2>管理员登录</h2><p>输入部署时配置的 Admin Token。</p><form id="loginForm"><input id="token" type="password" autocomplete="current-password" placeholder="Admin Token" required><button>进入管理台</button></form><p id="loginError" class="error"></p></section>
+    <section id="app" class="hidden">
+      <div class="grid stats"><article class="card"><span>Hub 状态</span><strong id="health">—</strong></article><article class="card"><span>下游服务</span><strong id="serverCount">0</strong></article><article class="card"><span>公开工具</span><strong id="toolCount">0</strong></article><article class="card"><span>最近调用</span><strong id="callCount">0</strong></article></div>
+      <section class="card"><div class="titlebar"><div><h2>下游 MCP 服务</h2><p>保存后会原子写入配置并立即热重载。</p></div><button id="addServer">添加服务</button></div><div id="servers" class="servers"></div></section>
+      <section class="card"><div class="titlebar"><div><h2>最近调用</h2><p>只显示脱敏摘要。</p></div><button id="refresh" class="ghost">刷新</button></div><div id="calls" class="calls"></div></section>
+      <section class="card connection"><h2>客户端接入</h2><label>Streamable HTTP</label><code id="mcpEndpoint"></code><label>stdio bridge</label><code id="stdioCommand"></code></section>
+    </section>
+  </main>
+  <dialog id="editor"><form id="serverForm" method="dialog"><div class="titlebar"><h2 id="editorTitle">添加 MCP 服务</h2><button value="cancel" class="ghost">关闭</button></div><input id="serverId" placeholder="服务 ID，例如 filesystem" required pattern="[a-z][a-z0-9_-]{0,31}"><select id="serverType"><option value="stdio">stdio</option><option value="streamable_http">Streamable HTTP</option></select><label>启用 <input id="enabled" type="checkbox" checked></label><textarea id="serverJSON" rows="16" spellcheck="false"></textarea><p class="hint">敏感字段显示为 __MCP_HUB_SECRET_SET__；不修改即可保留原值。</p><p id="editorError" class="error"></p><div class="actions"><button id="saveServer" value="default">保存并重载</button></div></form></dialog>
+  <script src="/admin/app.js" defer></script>
+</body>
+</html>

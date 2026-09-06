@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "hub": {
+    "listen": "127.0.0.1:8080"
+  },
+  "defaults": {
+    "startupTimeout": "20s",
+    "callTimeout": "60s",
+    "maxConcurrency": 8
+  },
+  "mcpServers": {
+    "local-tools": {
+      "enabled": true,
+      "type": "stdio",
+      "command": "node",
+      "args": ["path/to/server.js"],
+      "cwd": ".",
+      "env": {},
+      "tools": {
+        "disabled": []
+      }
+    },
+    "remote-tools": {
+      "enabled": false,
+      "type": "streamable_http",
+      "url": "https://example.invalid/mcp",
+      "headers": {
+        "Authorization": "Bearer ${REMOTE_TOKEN}"
+      },
+      "tools": {
+        "disabled": []
+      }
+    }
+  }
+}

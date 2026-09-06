@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "hub": {
+    "listen": "127.0.0.1:8080",
+    "publicMode": true,
+    "publicUrl": "https://mcp.example.com",
+    "allowedHosts": ["mcp.example.com"],
+    "trustedProxies": ["127.0.0.1/32", "::1/128"],
+    "auth": {
+      "bearerToken": "${MCP_HUB_TOKEN}"
+    },
+    "admin": {
+      "enabled": true,
+      "token": "${MCP_HUB_ADMIN_TOKEN}",
+      "sessionTimeout": "30m"
+    }
+  },
+  "defaults": {
+    "startupTimeout": "20s",
+    "callTimeout": "60s",
+    "maxConcurrency": 8
+  },
+  "mcpServers": {}
+}

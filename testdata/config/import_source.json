@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "local-tool": {
+      "command": "node",
+      "args": ["server.js"],
+      "env": {
+        "DEBUG": "true"
+      }
+    },
+    "remote-tool": {
+      "type": "http",
+      "url": "https://mcp.remote.example/mcp",
+      "headers": {
+        "X-Api-Key": "${SECRET_KEY}"
+      }
+    }
+  }
+}
