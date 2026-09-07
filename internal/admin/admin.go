@@ -307,17 +307,19 @@ func (h *Handler) getConfig(w http.ResponseWriter) {
 }
 
 func (h *Handler) putServer(w http.ResponseWriter, r *http.Request, id string) {
-	h.withConfigTransaction(func(reload func(context.Context) error) {
-		h.putServerLocked(w, r, id, reload)
-	})
-}
-
-func (h *Handler) putServerLocked(w http.ResponseWriter, r *http.Request, id string, reload func(context.Context) error) {
+	// Read untrusted network input before acquiring the transaction lock, which
+	// is also used by configuration polling. Slow uploads must not stall reloads.
 	var incoming config.ServerConfig
 	if err := decodeJSONBody(r, &incoming); err != nil {
 		http.Error(w, "invalid server configuration", http.StatusBadRequest)
 		return
 	}
+	h.withConfigTransaction(func(reload func(context.Context) error) {
+		h.putServerLocked(w, r, id, incoming, reload)
+	})
+}
+
+func (h *Handler) putServerLocked(w http.ResponseWriter, r *http.Request, id string, incoming config.ServerConfig, reload func(context.Context) error) {
 	cfg, digest, err := h.readRawConfig()
 	if err != nil {
 		http.Error(w, "configuration unavailable", http.StatusInternalServerError)

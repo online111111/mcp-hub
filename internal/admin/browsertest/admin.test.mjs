@@ -26,19 +26,20 @@ async function setup(t, source) {
   const page = await browser.newPage();
   t.after(() => page.close());
   const writes = [], errors = [];
-  const apiState = { authenticated: false };
+  const apiState = { authenticated: false, revision: '"revision-1"', failStatus: false };
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/api/admin/v1/**', async route => {
     const req = route.request(), path = new URL(req.url()).pathname;
-    const respond = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body), headers: { ETag: '"revision-1"' } });
+    const respond = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body), headers: { ETag: apiState.revision } });
     if (path.endsWith('/auth/login')) {
       if (req.postDataJSON().token !== 'admin-token') return respond({ error: 'invalid token' }, 401);
       apiState.authenticated = true; return respond({ csrfToken: 'csrf-test' });
     }
     if (!apiState.authenticated) return respond({}, 401);
     if (path.endsWith('/auth/me')) return respond({ csrfToken: 'csrf-test' });
+    if (path.endsWith('/auth/logout') && apiState.failLogout) return respond({ error: 'logout unavailable' }, 503);
     if (path.endsWith('/config')) return respond({ mcpServers: { original: source } });
-    if (path.endsWith('/status')) return respond({ servers: [], recentCalls: [] });
+    if (path.endsWith('/status')) return apiState.failStatus ? respond({error: 'status unavailable'}, 503) : respond({ servers: [], recentCalls: [] });
     if (req.method() === 'PUT') {
       writes.push({ body: req.postDataJSON(), headers: req.headers(), path }); return respond({});
     }
@@ -135,4 +136,60 @@ test('stdio arguments survive form, JSON and save with per-item editing', async 
   assert.equal(writes[0].headers['x-csrf-token'], 'csrf-test');
   assert.equal(writes[0].headers['if-match'], '"revision-1"');
   assert.deepEqual(errors, []);
+});
+
+
+test('partial refresh cannot pair stale config with a new revision', async t => {
+  const { page, writes, apiState } = await setup(t, { type: 'stdio', command: 'node' });
+  apiState.revision = '"revision-2"';
+  apiState.failStatus = true;
+  await page.locator('#refreshTop').click();
+  await page.locator('.toast.error').waitFor();
+  await page.locator('[data-action="edit"]').click();
+  await page.locator('#saveServer').click();
+  await page.waitForFunction(() => !document.querySelector('#editor').open);
+  assert.equal(writes[0].headers['if-match'], '"revision-1"');
+});
+
+test('navigation respects the system reduced-motion preference', async t => {
+  const { page } = await setup(t, { type: 'stdio', command: 'node' });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.evaluate(() => {
+    Element.prototype.scrollIntoView = function (options) { window.scrollOptions = options; };
+  });
+  await page.locator('[data-section="callsSection"]').click();
+  assert.equal(await page.evaluate(() => window.scrollOptions.behavior), 'instant');
+});
+
+test('failed logout warns that the server session may remain active', async t => {
+  const { page, errors, apiState } = await setup(t, { type: 'stdio', command: 'node' });
+  apiState.failLogout = true;
+  await page.locator('#logout').click();
+  await page.locator('#login').waitFor({ state: 'visible' });
+  await page.waitForTimeout(100);
+  assert.deepEqual(errors, []);
+  assert.match(await page.locator('#loginError').textContent(), /会话.*有效/);
+});
+
+test('failed manual refresh is reported without an unhandled rejection', async t => {
+  const { page, errors, apiState } = await setup(t, { type: 'stdio', command: 'node' });
+  apiState.failStatus = true;
+  await page.locator('#refreshTop').click();
+  await page.locator('.toast.error').waitFor();
+  await page.waitForTimeout(100);
+  assert.deepEqual(errors, []);
+  assert.match(await page.locator('#headerHealth').textContent(), /连接中断/);
+});
+
+test('editor saves against the revision it opened, not a later refresh', async t => {
+  const { page, writes, apiState } = await setup(t, { type: 'stdio', command: 'node' });
+  await page.locator('[data-action="edit"]').click();
+  apiState.revision = '"revision-2"';
+  // A background refresh must never authorize an old editor draft against a new revision.
+  await page.evaluate(() => document.querySelector('#refreshTop').click());
+  await page.locator('.toast.success').waitFor();
+  await page.locator('#command').fill('edited-command');
+  await page.locator('#saveServer').click();
+  await page.waitForFunction(() => !document.querySelector('#editor').open);
+  assert.equal(writes[0].headers['if-match'], '"revision-1"');
 });
