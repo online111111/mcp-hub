@@ -20,10 +20,11 @@ const state = {
   status: null,
   editorMode: "form",
   editingId: null,
+  editorEtag: "",
   refreshing: false,
 };
 
-async function api(path, options = {}) {
+async function api(path, options = {}, { withMeta = false } = {}) {
   const headers = new Headers(options.headers || {});
   if (options.body !== undefined) {
     headers.set("Content-Type", "application/json");
@@ -51,14 +52,13 @@ async function api(path, options = {}) {
     throw new Error(text.trim() || `请求失败 (${response.status})`);
   }
 
-  const etag = response.headers.get("ETag");
-  if (etag) state.etag = etag;
-  if (!text) return null;
+  let data = null;
   try {
-    return JSON.parse(text);
+    if (text) data = JSON.parse(text);
   } catch {
     throw new Error("Hub 返回了无法解析的数据");
   }
+  return withMeta ? { data, etag: response.headers.get("ETag") || "" } : data;
 }
 
 function showLogin() {
@@ -110,11 +110,11 @@ async function refreshAll({ announce = false } = {}) {
   state.refreshing = true;
   try {
     const [config, status] = await Promise.all([
-      api("/config"),
+      api("/config", {}, { withMeta: true }),
       api("/status"),
     ]);
-    state.config = config;
-    state.status = status;
+    // Publish the config and its revision together only after both requests succeed.
+    Object.assign(state, { config: config.data, etag: config.etag, status });
     render(status);
     setConnectionState(true);
     if (announce) toast("状态已刷新");
@@ -265,6 +265,7 @@ function renderCalls() {
 
 function openEditor(id = null, source = null) {
   state.editingId = id;
+  state.editorEtag = state.etag;
   const server = normalizeServer(
     source || (id && state.config?.mcpServers?.[id]) || {},
   );
@@ -541,10 +542,16 @@ $("#togglePassword").addEventListener("click", () => {
 });
 
 $("#logout").addEventListener("click", async () => {
+  $("#loginError").textContent = "";
   try {
     await api("/auth/logout", { method: "POST", body: "{}" });
+  } catch {
+    $("#loginError").textContent =
+      "退出请求未确认，服务器会话可能仍然有效。请恢复连接后重新登录并退出。";
   } finally {
     state.csrf = "";
+    state.etag = "";
+    state.editorEtag = "";
     state.config = null;
     state.status = null;
     showLogin();
@@ -593,7 +600,7 @@ $("#serverForm").addEventListener("submit", async (event) => {
     save.textContent = "保存中…";
     await api(`/servers/${encodeURIComponent(id)}`, {
       method: "PUT",
-      headers: { "If-Match": state.etag },
+      headers: { "If-Match": state.editorEtag },
       body: JSON.stringify(server),
     });
     $("#editor").close();
@@ -609,11 +616,11 @@ $("#serverForm").addEventListener("submit", async (event) => {
 
 $("#refresh").addEventListener(
   "click",
-  () => void refreshAll({ announce: true }),
+  () => void refreshAll({ announce: true }).catch(() => {}),
 );
 $("#refreshTop").addEventListener(
   "click",
-  () => void refreshAll({ announce: true }),
+  () => void refreshAll({ announce: true }).catch(() => {}),
 );
 $("#callSearch").addEventListener("input", renderCalls);
 $("#callOutcome").addEventListener("change", renderCalls);
@@ -622,7 +629,11 @@ for (const button of $$(".nav-item")) {
   button.addEventListener("click", () => {
     for (const item of $$(".nav-item")) item.classList.remove("active");
     button.classList.add("active");
-    $(`#${button.dataset.section}`).scrollIntoView({ behavior: "smooth" });
+    $(`#${button.dataset.section}`).scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
+        : "smooth",
+    });
   });
 }
 

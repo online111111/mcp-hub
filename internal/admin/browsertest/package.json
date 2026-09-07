@@ -2,6 +2,6 @@
   "name": "mcp-hub-admin-browser-tests",
   "private": true,
   "type": "module",
-  "scripts": { "test": "node --test admin.test.mjs" },
+  "scripts": { "test": "node --test --test-concurrency=1 *.test.mjs" },
   "devDependencies": { "playwright": "1.63.0" }
 }

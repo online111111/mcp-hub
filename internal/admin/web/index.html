@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <title>MCP Hub 管理台</title>
-    <link rel="stylesheet" href="/admin/app.css?v=20260906-v03" />
+    <link rel="stylesheet" href="/admin/app.css?v=20260907-console" />
   </head>
   <body>
     <div id="toastStack" class="toast-stack" aria-live="polite"></div>
     <main class="page-shell">
       <header class="topbar">
         <div class="brand-block">
-          <div class="brand-mark">M</div>
+          <div class="brand-mark" aria-hidden="true">M</div>
           <div>
             <div class="brand-line">
               <h1>MCP Hub</h1>
@@ -66,37 +66,38 @@
 
       <section id="app" class="app-layout hidden">
         <aside class="sidebar">
+          <div class="sidebar-heading">WORKSPACE / 管理空间</div>
           <nav class="side-nav" aria-label="管理台导航">
             <button
               class="nav-item active"
               data-section="overview"
               type="button"
             >
-              <span>概览</span><small>状态与服务</small>
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>概览</span><small>状态与服务</small>
             </button>
             <button
               class="nav-item"
               data-section="serversSection"
               type="button"
             >
-              <span>服务</span><small>下游 MCP</small>
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M12 6.5h5M12 17.5h5"/></svg><span>服务</span><small>下游 MCP</small>
             </button>
             <button class="nav-item" data-section="callsSection" type="button">
-              <span>调用</span><small>最近记录</small>
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>调用</span><small>最近记录</small>
             </button>
             <button
               class="nav-item"
               data-section="connectSection"
               type="button"
             >
-              <span>接入</span><small>客户端配置</small>
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 8l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(0 -1)"/></svg><span>接入</span><small>客户端配置</small>
             </button>
             <button
               class="nav-item"
               data-section="agentDeploySection"
               type="button"
             >
-              <span>Agent</span><small>自动部署</small>
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-5 2 2-14"/></svg><span>Agent</span><small>自动部署</small>
             </button>
           </nav>
           <div class="sidebar-meta">
@@ -175,15 +176,16 @@
             <div class="call-toolbar">
               <input
                 id="callSearch"
+                aria-label="搜索工具或服务"
                 type="search"
                 placeholder="搜索工具或服务…"
-              /><select id="callOutcome">
+              /><select id="callOutcome" aria-label="筛选调用结果">
                 <option value="all">全部结果</option>
                 <option value="success">仅成功</option>
                 <option value="error">仅失败</option>
               </select>
             </div>
-            <div class="table-wrap">
+            <div class="table-wrap" tabindex="0" role="region" aria-label="调用记录，可横向滚动">
               <table class="call-table">
                 <thead>
                   <tr>
@@ -309,7 +311,7 @@
       </section>
     </main>
 
-    <dialog id="editor" class="editor-dialog">
+    <dialog id="editor" class="editor-dialog" aria-labelledby="editorTitle" aria-describedby="editorSubtitle">
       <form id="serverForm" method="dialog">
         <div class="dialog-head">
           <div>
@@ -502,6 +504,6 @@
         </div>
       </form>
     </dialog>
-    <script type="module" src="/admin/app.js?v=20260907-agent-deployer"></script>
+    <script type="module" src="/admin/app.js?v=20260907-console"></script>
   </body>
 </html>
