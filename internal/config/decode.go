@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
+	"strings"
 )
 
 var (
@@ -41,31 +43,22 @@ func CheckDuplicateKeys(data []byte) error {
 		case json.Delim:
 			switch t {
 			case '{':
-				stack = append(stack, state{
-					isObject:     true,
-					expectingKey: true,
-					keys:         make(map[string]struct{}),
-				})
+				stack = append(stack, state{isObject: true, expectingKey: true, keys: make(map[string]struct{})})
 			case '}':
 				if len(stack) == 0 || !stack[len(stack)-1].isObject {
 					return errors.New("mismatched '}' in JSON")
 				}
 				stack = stack[:len(stack)-1]
-				// If parent was an object waiting for value, value is now complete
 				if len(stack) > 0 && stack[len(stack)-1].isObject {
 					stack[len(stack)-1].expectingKey = true
 				}
 			case '[':
-				stack = append(stack, state{
-					isObject:     false,
-					expectingKey: false,
-				})
+				stack = append(stack, state{isObject: false})
 			case ']':
 				if len(stack) == 0 || stack[len(stack)-1].isObject {
 					return errors.New("mismatched ']' in JSON")
 				}
 				stack = stack[:len(stack)-1]
-				// If parent was an object waiting for value, value is now complete
 				if len(stack) > 0 && stack[len(stack)-1].isObject {
 					stack[len(stack)-1].expectingKey = true
 				}
@@ -80,12 +73,10 @@ func CheckDuplicateKeys(data []byte) error {
 					s.keys[t] = struct{}{}
 					s.expectingKey = false
 				} else {
-					// String was a value
 					s.expectingKey = true
 				}
 			}
 		default:
-			// Number, bool, nil
 			if len(stack) > 0 && stack[len(stack)-1].isObject {
 				stack[len(stack)-1].expectingKey = true
 			}
@@ -95,36 +86,114 @@ func CheckDuplicateKeys(data []byte) error {
 	if len(stack) != 0 {
 		return errors.New("unexpected end of JSON input: unclosed object or array")
 	}
+	return nil
+}
 
+// validateExactJSONFieldNames rejects the case-insensitive struct-field matching
+// performed by encoding/json. Configuration field names are a wire contract and
+// must exactly match their json tags (for example publicMode, not PublicMode).
+func validateExactJSONFieldNames(data []byte, target any) error {
+	var value any
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.UseNumber()
+	if err := dec.Decode(&value); err != nil {
+		return err
+	}
+	t := reflect.TypeOf(target)
+	if t == nil {
+		return errors.New("decode target type is nil")
+	}
+	return validateJSONShape(value, t, "$")
+}
+
+func validateJSONShape(value any, t reflect.Type, path string) error {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+
+	switch t.Kind() {
+	case reflect.Struct:
+		obj, ok := value.(map[string]any)
+		if !ok {
+			// Let the real decoder report the type mismatch with its normal error.
+			return nil
+		}
+		fields := make(map[string]reflect.Type)
+		for i := 0; i < t.NumField(); i++ {
+			f := t.Field(i)
+			if f.PkgPath != "" { // unexported
+				continue
+			}
+			tag := f.Tag.Get("json")
+			name := strings.Split(tag, ",")[0]
+			if name == "-" {
+				continue
+			}
+			if name == "" {
+				name = f.Name
+			}
+			fields[name] = f.Type
+		}
+		for key, child := range obj {
+			fieldType, ok := fields[key]
+			if !ok {
+				return fmt.Errorf("JSON field %s.%s does not exactly match an allowed field name", path, key)
+			}
+			if err := validateJSONShape(child, fieldType, path+"."+key); err != nil {
+				return err
+			}
+		}
+
+	case reflect.Map:
+		obj, ok := value.(map[string]any)
+		if !ok {
+			return nil
+		}
+		for key, child := range obj {
+			if err := validateJSONShape(child, t.Elem(), path+"."+key); err != nil {
+				return err
+			}
+		}
+
+	case reflect.Slice, reflect.Array:
+		arr, ok := value.([]any)
+		if !ok {
+			return nil
+		}
+		for i, child := range arr {
+			if err := validateJSONShape(child, t.Elem(), fmt.Sprintf("%s[%d]", path, i)); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
 // DecodeStrict decodes JSON bytes into v while enforcing:
 // 1. File size limit (<= 1 MiB)
 // 2. Duplicate key rejection at all object levels
-// 3. Unknown field rejection
-// 4. Trailing data rejection (must end at EOF)
+// 3. Exact, case-sensitive field-name matching
+// 4. Unknown field rejection
+// 5. Trailing data rejection (must end at EOF)
 func DecodeStrict(data []byte, v any) error {
 	if len(data) > MaxConfigFileSize {
 		return ErrConfigFileTooLarge
 	}
-
 	if err := CheckDuplicateKeys(data); err != nil {
 		return fmt.Errorf("duplicate key check failed: %w", err)
+	}
+	if err := validateExactJSONFieldNames(data, v); err != nil {
+		return fmt.Errorf("exact field-name check failed: %w", err)
 	}
 
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
-
 	if err := dec.Decode(v); err != nil {
 		return fmt.Errorf("JSON decode error: %w", err)
 	}
-
-	// Ensure there is no trailing data
 	var trailing any
 	if err := dec.Decode(&trailing); err != io.EOF {
 		return fmt.Errorf("%w: extra content found after root object", ErrTrailingJSON)
 	}
-
 	return nil
 }
