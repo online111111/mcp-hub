@@ -27,6 +27,15 @@ func TestValidateHubEndpoint(t *testing.T) {
 	}
 }
 
+func TestValidateMCPHTTPURLAllowsHTTPSQuery(t *testing.T) {
+	if _, err := ValidateMCPHTTPURL("https://mcp.example.com/service?tenant=one"); err != nil {
+		t.Fatalf("generic downstream URL with query was rejected: %v", err)
+	}
+	if _, err := ValidateMCPHTTPURL("http://mcp.example.com/service?tenant=one"); err == nil {
+		t.Fatal("remote plaintext HTTP must still be rejected")
+	}
+}
+
 func TestSafeURLRedactsCredentialsAndQuery(t *testing.T) {
 	got := SafeURL("https://user:pass@example.com/mcp?token=secret#frag")
 	if got != "https://example.com/mcp" {
