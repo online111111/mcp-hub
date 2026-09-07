@@ -200,6 +200,10 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 		} else {
 			h.writeJSON(w, http.StatusOK, h.opts.Status())
 		}
+	case r.URL.Path == "/api/admin/v1/agent-prompt" && r.Method == http.MethodGet:
+		h.getAgentPrompt(w)
+	case r.URL.Path == "/api/admin/v1/agent-skill.zip" && r.Method == http.MethodGet:
+		h.getAgentSkill(w)
 	case r.URL.Path == "/api/admin/v1/config" && r.Method == http.MethodGet:
 		h.getConfig(w)
 	case strings.HasPrefix(r.URL.Path, "/api/admin/v1/servers/"):

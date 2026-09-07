@@ -17,7 +17,8 @@ they are persisted.
 - Stable public tool names and explicit, no-replay request routing.
 - Strict, size-bounded JSON configuration with durable atomic compare-and-swap writes.
 - Hot reload for downstream changes and restart detection for startup-bound settings.
-- A responsive `/admin/` console for status, calls, and server configuration.
+- A responsive `/admin/` console for status, calls, server configuration, client access, and Agent deployment assets.
+- An embedded `mcp-hub-deployer` Skill plus a copy-paste Agent prompt for repeatable server/client deployment, upgrades, verification, and recovery.
 - Loopback-safe local mode and an explicit authenticated public mode.
 - A stdio bridge for clients that cannot connect to HTTP MCP endpoints.
 
@@ -86,6 +87,15 @@ See [configuration](docs/CONFIG.md) for every field and reload rule.
 Enable `hub.admin` to serve the embedded management console at `/admin/`. Admin
 sessions use HttpOnly/SameSite cookies, synchronizer CSRF tokens, strict origin
 checks, bounded login/API rates, secret placeholders, and ETag/CAS writes.
+
+After signing in, the **Agent 自动部署** section exposes two authenticated deployment aids:
+
+- download a generated `skill.zip` containing the embedded `mcp-hub-deployer` Skill;
+- copy a generic Agent deployment prompt for agents that do not support Skills.
+
+The Skill source lives under `internal/admin/agent-skill/` and is compiled into the
+single MCP Hub binary, so the management page always serves the deployment guidance
+that shipped with that binary rather than a separately hosted artifact.
 
 Public deployment is fail-closed. It requires `hub.publicMode`, an HTTPS
 `publicUrl`, an `allowedHosts` list, trusted reverse-proxy CIDRs, and separate MCP

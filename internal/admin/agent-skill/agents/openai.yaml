@@ -1,0 +1,3 @@
+interface:
+  display_name: "MCP Hub Deployer"
+  short_description: "Deploy and verify MCP Hub servers, clients, bridges, upgrades, and recovery."
