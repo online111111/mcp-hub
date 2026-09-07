@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"mcp-hub/internal/buildinfo"
 	"mcp-hub/internal/downstream"
 )
 
@@ -137,14 +138,14 @@ func New(opts Options) (*Bridge, error) {
 	if opts.ClientInfo == nil {
 		opts.ClientInfo = &mcp.Implementation{
 			Name:    "mcp-hub-bridge",
-			Version: "1.0.0",
+			Version: buildinfo.Version,
 		}
 	}
 
 	if opts.ServerInfo == nil {
 		opts.ServerInfo = &mcp.Implementation{
 			Name:    "mcp-hub-bridge",
-			Version: "1.0.0",
+			Version: buildinfo.Version,
 		}
 	}
 

@@ -1,9 +1,12 @@
 // Package buildinfo owns the product identity exposed by every transport.
-// Keeping this in one package prevents CLI, HTTP, and bridge versions from
-// drifting apart during releases.
+// Release builds override Commit and BuildDate with -ldflags; Version remains a
+// sensible source-build default so every surface reports the same identity.
 package buildinfo
 
-const (
-	Name    = "mcp-hub"
-	Version = "0.3.0"
+const Name = "mcp-hub"
+
+var (
+	Version   = "0.4.0"
+	Commit    = "unknown"
+	BuildDate = "unknown"
 )

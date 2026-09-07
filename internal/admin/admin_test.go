@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"mcp-hub/internal/config"
 )
 
 func TestEmbeddedAdminUsesCSPCompatibleModuleEvents(t *testing.T) {
@@ -78,7 +80,7 @@ func newAdminTest(t *testing.T) (*Handler, string) {
 	if err := os.WriteFile(cfgPath, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("ADMIN_TOKEN", "admin-secret")
+	t.Setenv("ADMIN_TOKEN", "admin-secret-0123456789-0123456789-abc")
 	t.Setenv("REMOTE_TOKEN", "remote-secret")
 	h, err := New(Options{ConfigPath: cfgPath, AdminToken: "admin-secret", SessionTimeout: time.Hour, Status: func() any { return map[string]any{"ok": true} }})
 	if err != nil {
@@ -247,5 +249,41 @@ func TestAdminRollsBackConfigWhenLiveReloadFails(t *testing.T) {
 	}
 	if !bytes.Equal(restored, original) {
 		t.Fatalf("configuration was not rolled back\nwant: %s\n got: %s", original, restored)
+	}
+}
+
+func TestAdminPreflightFailureDoesNotPersistOrReload(t *testing.T) {
+	h, configPath := newAdminTest(t)
+	original, err := config.ReadFileLimited(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.opts.Preflight = func(context.Context, *config.ResolvedConfig) error {
+		return errors.New("server \"remote\" preflight failed: connection_refused")
+	}
+	reloads := 0
+	h.opts.Reload = func(context.Context) error { reloads++; return nil }
+	raw, digest, err := h.readRawConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := raw.MCPServers["remote"]
+	srv.URL = "https://changed.example/mcp"
+	raw.MCPServers["remote"] = srv
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/v1/servers/remote", nil)
+	resp := httptest.NewRecorder()
+	h.writeConfig(resp, req, raw, digest)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected preflight rejection, got %d: %s", resp.Code, resp.Body.String())
+	}
+	if reloads != 0 {
+		t.Fatalf("reload ran despite failed preflight: %d", reloads)
+	}
+	after, err := config.ReadFileLimited(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, original) {
+		t.Fatal("failed preflight changed the persisted configuration")
 	}
 }

@@ -47,10 +47,10 @@ func (a *CatalogPublisherAdapter) LookupRoute(publicName string) (catalog.RouteE
 	return a.cat.LookupRoute(publicName)
 }
 func (a *CatalogPublisherAdapter) Snapshot() *catalog.Snapshot { return a.cat.Snapshot() }
-func (a *CatalogPublisherAdapter) Revision() int64 { return a.cat.Revision() }
-func (a *CatalogPublisherAdapter) RLock() { a.mu.RLock() }
-func (a *CatalogPublisherAdapter) RUnlock() { a.mu.RUnlock() }
-func (a *CatalogPublisherAdapter) Catalog() *catalog.Catalog { return a.cat }
+func (a *CatalogPublisherAdapter) Revision() int64             { return a.cat.Revision() }
+func (a *CatalogPublisherAdapter) RLock()                      { a.mu.RLock() }
+func (a *CatalogPublisherAdapter) RUnlock()                    { a.mu.RUnlock() }
+func (a *CatalogPublisherAdapter) Catalog() *catalog.Catalog   { return a.cat }
 
 type Manager struct {
 	mu           sync.RWMutex
@@ -79,13 +79,13 @@ func NewManager(pub catalog.Publisher, opts ...Option) *Manager {
 		pub = NewCatalogPublisher(catalog.NewCatalog())
 	}
 	m := &Manager{
-		pub: pub,
-		factory: NewDefaultSessionFactory(),
-		coordinators: make(map[string]*Coordinator),
-		limiter: make(chan struct{}, defaultDialConcurrency),
-		backoffDelays: defaultBackoffDelays,
-		readyResetDur: defaultReadyResetDuration,
-		drainTimeout: defaultDrainTimeout,
+		pub:            pub,
+		factory:        NewDefaultSessionFactory(),
+		coordinators:   make(map[string]*Coordinator),
+		limiter:        make(chan struct{}, defaultDialConcurrency),
+		backoffDelays:  defaultBackoffDelays,
+		readyResetDur:  defaultReadyResetDuration,
+		drainTimeout:   defaultDrainTimeout,
 		maxRecentCalls: 200,
 	}
 	for _, opt := range opts {
@@ -94,12 +94,12 @@ func NewManager(pub catalog.Publisher, opts ...Option) *Manager {
 	m.router = router.NewRouter(pub, m)
 	m.router.SetCallRecorder(func(call router.CallRecord) {
 		m.RecordCall(inbound.RecentCallDTO{
-			RequestID: call.RequestID,
-			Time: call.Time.Format(time.RFC3339Nano),
-			DurationMs: call.Duration.Milliseconds(),
-			Tool: call.Tool,
-			ServerID: call.ServerID,
-			Outcome: call.Outcome,
+			RequestID:     call.RequestID,
+			Time:          call.Time.Format(time.RFC3339Nano),
+			DurationMs:    call.Duration.Milliseconds(),
+			Tool:          call.Tool,
+			ServerID:      call.ServerID,
+			Outcome:       call.Outcome,
 			ErrorCategory: call.ErrorCategory,
 		})
 	})
@@ -248,6 +248,82 @@ func (m *Manager) Apply(ctx context.Context, cfg *config.ResolvedConfig) error {
 	}
 }
 
+// Preflight verifies every enabled downstream whose connection settings would
+// change before an admin transaction persists the candidate configuration. It
+// uses isolated sessions and an isolated catalog, so probing cannot mutate the
+// live routing table or consume live generation capacity.
+func (m *Manager) Preflight(ctx context.Context, cfg *config.ResolvedConfig) error {
+	if cfg == nil {
+		return errors.New("manager: resolved config cannot be nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	m.mu.RLock()
+	if m.stopped {
+		m.mu.RUnlock()
+		return ErrManagerStopped
+	}
+	factory := m.factory
+	current := make(map[string]config.ResolvedServer, len(m.coordinators))
+	for id, coord := range m.coordinators {
+		coord.mu.Lock()
+		current[id] = coord.desired.ResolvedConfig
+		coord.mu.Unlock()
+	}
+	m.mu.RUnlock()
+
+	ids := make([]string, 0, len(cfg.Servers))
+	for id, srv := range cfg.Servers {
+		if !srv.Enabled {
+			continue
+		}
+		if old, ok := current[id]; ok && diffConfig(old, srv) != changeConnection {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	probePublisher := NewCatalogPublisher(catalog.NewCatalog())
+	for _, id := range ids {
+		srv := cfg.Servers[id]
+		probeCtx := ctx
+		cancel := func() {}
+		if srv.StartupTimeout > 0 {
+			probeCtx, cancel = context.WithTimeout(ctx, srv.StartupTimeout)
+		}
+
+		sess, procCloser, err := factory.CreateSession(probeCtx, srv, nil)
+		if err != nil {
+			cancel()
+			return fmt.Errorf("server %q preflight failed: %s", id, sanitizeError(err))
+		}
+		closeProbe := func() {
+			_ = sess.Close()
+			if procCloser != nil {
+				_ = procCloser.Close()
+			}
+		}
+		tools, listErr := sess.ListAllTools(probeCtx)
+		closeProbe()
+		cancel()
+		if listErr != nil {
+			return fmt.Errorf("server %q preflight failed: %s", id, sanitizeError(listErr))
+		}
+		for _, tool := range tools {
+			if validateErr := catalog.ValidateTool(tool); validateErr != nil {
+				return fmt.Errorf("server %q preflight failed: tool_catalog_invalid", id)
+			}
+		}
+		if _, publishErr := probePublisher.PublishServer(id, tools, disabledNames(srv.DisabledTools)); publishErr != nil {
+			return fmt.Errorf("server %q preflight failed: tool_catalog_invalid", id)
+		}
+	}
+	return nil
+}
+
 func (m *Manager) RefreshServer(ctx context.Context, serverID string) error {
 	m.mu.RLock()
 	coord, ok := m.coordinators[serverID]
@@ -324,14 +400,14 @@ func (m *Manager) GetServerStatuses() []inbound.ServerStatusDTO {
 			unpublished = snap.UnpublishedCount(st.ID)
 		}
 		res = append(res, inbound.ServerStatusDTO{
-			ID: st.ID,
-			State: st.State,
-			PublishedToolCount: st.PublishedTools,
+			ID:                   st.ID,
+			State:                st.State,
+			PublishedToolCount:   st.PublishedTools,
 			UnpublishedToolCount: unpublished,
-			ActiveCalls: st.ActiveLeases,
-			DesiredRevision: st.DesiredRevision,
-			ActiveRevision: st.ActiveRevision,
-			ErrorCategory: st.LastError,
+			ActiveCalls:          st.ActiveLeases,
+			DesiredRevision:      st.DesiredRevision,
+			ActiveRevision:       st.ActiveRevision,
+			ErrorCategory:        st.LastError,
 		})
 	}
 	sort.Slice(res, func(i, j int) bool { return res[i].ID < res[j].ID })

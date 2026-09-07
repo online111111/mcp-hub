@@ -39,6 +39,7 @@ var webFiles embed.FS
 
 type StatusProvider func() any
 type ReloadFunc func(context.Context) error
+type PreflightFunc func(context.Context, *config.ResolvedConfig) error
 
 type Options struct {
 	ConfigPath     string
@@ -49,6 +50,7 @@ type Options struct {
 	SessionTimeout time.Duration
 	Status         StatusProvider
 	Reload         ReloadFunc
+	Preflight      PreflightFunc
 	// ConfigTransaction must use the same serialization domain as file polling.
 	// Its callback receives a reload function that does not reacquire that lock.
 	ConfigTransaction func(func(func(context.Context) error))
@@ -380,7 +382,8 @@ func (h *Handler) writeConfigLocked(w http.ResponseWriter, r *http.Request, cfg 
 		http.Error(w, "configuration validation failed: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if _, err := config.Resolve(cfg, filepath.Dir(h.opts.ConfigPath), os.LookupEnv); err != nil {
+	resolved, err := config.Resolve(cfg, filepath.Dir(h.opts.ConfigPath), os.LookupEnv)
+	if err != nil {
 		http.Error(w, "configuration resolution failed", http.StatusBadRequest)
 		return
 	}
@@ -390,7 +393,7 @@ func (h *Handler) writeConfigLocked(w http.ResponseWriter, r *http.Request, cfg 
 		return
 	}
 	data = append(data, '\n')
-	previous, err := os.ReadFile(h.opts.ConfigPath)
+	previous, err := config.ReadFileLimited(h.opts.ConfigPath)
 	if err != nil {
 		http.Error(w, "configuration unavailable", http.StatusInternalServerError)
 		return
@@ -398,6 +401,15 @@ func (h *Handler) writeConfigLocked(w http.ResponseWriter, r *http.Request, cfg 
 	if config.ComputeDigest(previous) != digest {
 		http.Error(w, "configuration changed", http.StatusConflict)
 		return
+	}
+	if h.opts.Preflight != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+		preflightErr := h.opts.Preflight(ctx, resolved)
+		cancel()
+		if preflightErr != nil {
+			http.Error(w, "configuration preflight failed: "+preflightErr.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 	if err := config.WriteConfigFileAtomic(h.opts.ConfigPath, data, digest); err != nil {
 		var mismatch config.ErrDigestMismatch
@@ -434,7 +446,7 @@ func (h *Handler) writeConfigLocked(w http.ResponseWriter, r *http.Request, cfg 
 }
 
 func (h *Handler) readRawConfig() (*config.Config, string, error) {
-	data, err := os.ReadFile(h.opts.ConfigPath)
+	data, err := config.ReadFileLimited(h.opts.ConfigPath)
 	if err != nil {
 		return nil, "", err
 	}

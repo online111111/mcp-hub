@@ -43,11 +43,23 @@ func ComputeDigest(data []byte) string {
 
 // ComputeFileDigest reads the file at path and returns its SHA-256 digest.
 func ComputeFileDigest(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
-	return ComputeDigest(data), nil
+	defer f.Close()
+	if info, statErr := f.Stat(); statErr == nil && info.Mode().IsRegular() && info.Size() > MaxConfigFileSize {
+		return "", ErrConfigFileTooLarge
+	}
+	h := sha256.New()
+	n, err := io.Copy(h, io.LimitReader(f, MaxConfigFileSize+1))
+	if err != nil {
+		return "", err
+	}
+	if n > MaxConfigFileSize {
+		return "", ErrConfigFileTooLarge
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // AcquireLock attempts to acquire an OS-backed exclusive advisory lock on
@@ -117,6 +129,9 @@ func writeLockDetails(f *os.File, info string) error {
 // WriteConfigFileAtomic writes data to path atomically using a temporary file in the same directory,
 // protected by an exclusive lock file and optional CAS expectedDigest check.
 func WriteConfigFileAtomic(path string, data []byte, expectedDigest string) error {
+	if len(data) > MaxConfigFileSize {
+		return ErrConfigFileTooLarge
+	}
 	// The sibling lock must have a parent before acquisition, just like the
 	// temporary file. Creating it after AcquireLock made first writes fail.
 	dir := filepath.Dir(path)
@@ -131,14 +146,13 @@ func WriteConfigFileAtomic(path string, data []byte, expectedDigest string) erro
 
 	// CAS check if expectedDigest is specified
 	if expectedDigest != "" {
-		existingData, err := os.ReadFile(path)
+		actualDigest, err := ComputeFileDigest(path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				return ErrDigestMismatch{Expected: expectedDigest, Actual: "none (file does not exist)"}
 			}
-			return fmt.Errorf("failed to read existing file for CAS check: %w", err)
+			return fmt.Errorf("failed to digest existing file for CAS check: %w", err)
 		}
-		actualDigest := ComputeDigest(existingData)
 		if actualDigest != expectedDigest {
 			return ErrDigestMismatch{Expected: expectedDigest, Actual: actualDigest}
 		}
@@ -158,6 +172,10 @@ func WriteConfigFileAtomic(path string, data []byte, expectedDigest string) erro
 		}
 	}()
 
+	if err := tmpFile.Chmod(0600); err != nil {
+		_ = tmpFile.Close()
+		return fmt.Errorf("failed to secure temp file permissions: %w", err)
+	}
 	if _, err := tmpFile.Write(data); err != nil {
 		_ = tmpFile.Close()
 		return fmt.Errorf("failed to write to temp file: %w", err)
@@ -174,7 +192,9 @@ func WriteConfigFileAtomic(path string, data []byte, expectedDigest string) erro
 	if err := replaceFile(tmpPath, path); err != nil {
 		return fmt.Errorf("atomic replacement failed: %w", err)
 	}
-
 	cleanTemp = false
+	if err := syncParentDir(dir); err != nil {
+		return fmt.Errorf("failed to sync configuration directory %q: %w", dir, err)
+	}
 	return nil
 }

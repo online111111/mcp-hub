@@ -49,3 +49,5 @@ func replaceFile(from, to string) error {
 
 	return callErr
 }
+
+func syncParentDir(string) error { return nil }

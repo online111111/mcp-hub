@@ -4,18 +4,18 @@ MCP Hub is a single-binary gateway for running and aggregating multiple MCP
 servers. Configure downstream services once, then expose one Streamable HTTP
 endpoint to IDEs, agents, and stdio-only clients.
 
-The v0.3 refactor separates configuration loading, live-runtime control,
-protocol routing, and the admin UI. The admin console is usable in both local
-and reverse-proxied public mode. Pure JavaScript helper tests and Go HTTP/static
-asset tests cover specific contracts; they do not by themselves prove complete
-browser login, editing, duplication, or JSON-mode workflows.
+The v0.4 release candidate builds on the v0.3 refactor with stricter runtime,
+configuration, transport, process-lifecycle, and release engineering controls.
+The admin console is usable in both local and reverse-proxied public mode, and
+configuration changes that alter downstream connections are preflighted before
+they are persisted.
 
 ## What it provides
 
 - One `/mcp` endpoint with a dynamically updated tool catalog.
 - Managed stdio children and remote Streamable HTTP downstreams.
 - Stable public tool names and explicit, no-replay request routing.
-- Strict JSON configuration with atomic compare-and-swap writes.
+- Strict, size-bounded JSON configuration with durable atomic compare-and-swap writes.
 - Hot reload for downstream changes and restart detection for startup-bound settings.
 - A responsive `/admin/` console for status, calls, and server configuration.
 - Loopback-safe local mode and an explicit authenticated public mode.
@@ -89,7 +89,8 @@ checks, bounded login/API rates, secret placeholders, and ETag/CAS writes.
 
 Public deployment is fail-closed. It requires `hub.publicMode`, an HTTPS
 `publicUrl`, an `allowedHosts` list, trusted reverse-proxy CIDRs, and separate MCP
-and admin tokens. The Hub may still listen on loopback behind Caddy or Nginx.
+and admin tokens of at least 32 characters each. The Hub may still listen on
+loopback behind Caddy or Nginx.
 
 Use [the VPS deployment guide](docs/VPS.md) and
 [`config.vps.example.json`](config.vps.example.json) as the baseline.
@@ -113,9 +114,11 @@ package boundaries and invariants.
 
 ## Development and verification
 
-The module targets Go 1.25 and CI builds with the patched Go 1.26.6 toolchain.
-The production binary has no Node.js runtime dependency. Pure helper tests use
-Node without dependencies; optional Chromium UI regressions use a pinned
+The module currently keeps Go 1.25 compatibility while CI exercises both the
+compatibility floor and current Go across Linux, Windows, and macOS. Current-Go
+jobs also run the race detector and independent SDK probe, and CI includes a
+`govulncheck` gate. The production binary has no Node.js runtime dependency. Pure
+helper tests use Node without dependencies; optional Chromium UI regressions use a pinned
 Playwright development dependency.
 
 ```bash
@@ -155,9 +158,9 @@ The independent SDK probe lives in `verification/sdkprobe` and must be tested
 from that directory. GitHub Actions runs Go tests, race tests, vet, the SDK
 probe, builds, and the admin UI tests.
 
-Automated Windows and Linux verification does not prove compatibility with
-every third-party MCP server or GUI client. The exact manual compatibility
-matrix is tracked in [implementation status](docs/IMPLEMENTATION-STATUS.md).
+Automated Linux, Windows, and macOS verification does not prove compatibility
+with every third-party MCP server or GUI client. The exact evidence boundary is
+tracked in [implementation status](docs/IMPLEMENTATION-STATUS.md).
 
 ## Security boundary
 

@@ -41,7 +41,7 @@ A `streamable_http` server requires `url`. It may specify `headers`, but not `co
 
 HTTPS URLs are accepted for remote services. Plain HTTP is restricted to literal loopback hosts. URL userinfo and fragments are rejected. Redirects are not followed. Transport-owned headers such as `Host`, `Content-Length`, `Connection`, `Mcp-Session-Id`, and `Mcp-Protocol-Version` cannot be configured.
 
-Header and stdio environment values support one-pass `${NAME}` expansion. `$${NAME}` produces the literal `${NAME}`. Missing variables fail `validate`/`serve`; expansion never writes secrets back to the file. Required Hub tokens must remain non-empty after expansion, and enabled admin credentials must differ from the MCP bearer token.
+Header and stdio environment values support one-pass `${NAME}` expansion. `$${NAME}` produces the literal `${NAME}`. Missing variables fail `validate`/`serve`; expansion never writes secrets back to the file. Required Hub MCP and Admin tokens must remain non-empty after expansion, must each be at least 32 characters, and must differ from one another.
 
 ## Timeouts and limits
 
@@ -63,7 +63,9 @@ mcp-hub import --from source.json --config config.json --yes
 
 Import handles common `mcpServers` files, but does not start servers. A URL without an explicit type requires `--remote-type streamable_http`; old `sse` is not silently converted. Import previews show header/environment names, not values, and overwriting an existing server ID is rejected.
 
-Configuration writes use a same-directory temporary file, flush/sync, close, and atomic replacement. A lock file and pre-write digest check prevent concurrent writers from overwriting a changed file. Admin changes that cannot be applied to the live runtime are atomically rolled back and the previous runtime snapshot is restored. An invalid external edit leaves the last valid runtime configuration in place and reports the rejection in diagnostics.
+Configuration reads and digests are bounded by the 1 MiB configuration limit. Writes use a mode-`0600` same-directory temporary file, flush/sync, close, atomic replacement, and parent-directory durability sync where the operating system supports it. An OS-backed advisory lock plus a pre-write digest check prevents concurrent writers from overwriting a changed file without leaving a crash-stale lock condition.
+
+Before an Admin save persists a new or connection-changed enabled downstream, the Hub creates an isolated temporary session, lists its tools, and validates the discovered catalog. A failed preflight returns an error without changing the file or live routing table. If persistence succeeds but the subsequent live reload fails, the file is atomically rolled back and the previous runtime snapshot is restored. An invalid external edit leaves the last valid runtime configuration in place and reports the rejection in diagnostics.
 
 ## Validate and serve
 

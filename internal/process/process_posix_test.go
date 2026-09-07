@@ -16,7 +16,7 @@ import (
 
 func init() {
 	switch os.Getenv("MCP_POSIX_HELPER_MODE") {
-	case "spawn_grandchild":
+	case "spawn_grandchild", "spawn_grandchild_and_exit":
 		grandchild := exec.Command(os.Args[0])
 		grandchild.Env = append(os.Environ(), "MCP_POSIX_HELPER_MODE=hang")
 		if err := grandchild.Start(); err != nil {
@@ -25,6 +25,9 @@ func init() {
 		pidFile := os.Getenv("MCP_POSIX_GRANDCHILD_PID_FILE")
 		if pidFile != "" {
 			_ = os.WriteFile(pidFile, []byte(strconv.Itoa(grandchild.Process.Pid)), 0644)
+		}
+		if os.Getenv("MCP_POSIX_HELPER_MODE") == "spawn_grandchild_and_exit" {
+			os.Exit(0)
 		}
 		_, _ = os.Stdin.Read(make([]byte, 1))
 		_ = grandchild.Wait()
@@ -61,12 +64,16 @@ func waitForPosixProcessExit(pid int, timeout time.Duration) bool {
 }
 
 func startPosixGrandchildFixture(t *testing.T, ctx context.Context) (Process, int) {
+	return startPosixGrandchildFixtureMode(t, ctx, "spawn_grandchild")
+}
+
+func startPosixGrandchildFixtureMode(t *testing.T, ctx context.Context, mode string) (Process, int) {
 	t.Helper()
 	pidFile := filepath.Join(t.TempDir(), "grandchild.pid")
 	proc, err := Start(ctx, Spec{
 		Command: os.Args[0],
 		Env: append(os.Environ(),
-			"MCP_POSIX_HELPER_MODE=spawn_grandchild",
+			"MCP_POSIX_HELPER_MODE="+mode,
 			"MCP_POSIX_GRANDCHILD_PID_FILE="+pidFile,
 		),
 	}, WithGracePeriod(100*time.Millisecond))
@@ -110,5 +117,22 @@ func TestPOSIX_ContextCancelTerminatesGrandchild(t *testing.T) {
 	if !waitForPosixProcessExit(grandchildPID, 3*time.Second) {
 		_ = syscall.Kill(grandchildPID, syscall.SIGKILL)
 		t.Fatalf("grandchild PID %d survived context cancellation", grandchildPID)
+	}
+}
+
+func TestPOSIX_CloseTerminatesGrandchildAfterRootExitsFirst(t *testing.T) {
+	proc, grandchildPID := startPosixGrandchildFixtureMode(t, context.Background(), "spawn_grandchild_and_exit")
+	if err := proc.Wait(); err != nil {
+		t.Fatalf("root helper should exit cleanly: %v", err)
+	}
+	if !posixProcessAlive(grandchildPID) {
+		t.Fatal("fixture grandchild exited before cleanup could be tested")
+	}
+	if err := proc.Close(); err != nil {
+		t.Fatalf("Close after root exit returned error: %v", err)
+	}
+	if !waitForPosixProcessExit(grandchildPID, 2*time.Second) {
+		_ = syscall.Kill(grandchildPID, syscall.SIGKILL)
+		t.Fatalf("grandchild PID %d survived after root exited first", grandchildPID)
 	}
 }
