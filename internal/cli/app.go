@@ -165,7 +165,8 @@ func runServe(args []string, stdout, stderr io.Writer, stopCh <-chan struct{}) i
 					RecentCalls:      controller.GetRecentCalls(),
 				}
 			},
-			Reload: controller.ReloadNow,
+			Reload:            controller.ReloadNow,
+			Preflight:         mgr.Preflight,
 			ConfigTransaction: controller.WithConfigTransaction,
 		})
 		if adminErr != nil {
@@ -496,7 +497,7 @@ func runDoctor(args []string, stdout, stderr io.Writer) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "mcp-hub-doctor", Version: "1.0.0"}, nil)
+	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "mcp-hub-doctor", Version: buildinfo.Version}, nil)
 	transport := &mcp.StreamableClientTransport{
 		Endpoint:             mcpURL,
 		HTTPClient:           newHubHTTPClient(hubToken(*token), 10*time.Second),

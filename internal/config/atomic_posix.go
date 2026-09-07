@@ -2,14 +2,17 @@
 
 package config
 
-import (
-	"os"
-)
+import "os"
 
 func replaceFile(from, to string) error {
-	if err := os.Rename(from, to); err != nil {
+	return os.Rename(from, to)
+}
+
+func syncParentDir(dir string) error {
+	f, err := os.Open(dir)
+	if err != nil {
 		return err
 	}
-	// On POSIX, enforce 0600 file permissions for configuration files
-	return os.Chmod(to, 0600)
+	defer f.Close()
+	return f.Sync()
 }

@@ -2,15 +2,39 @@ package config
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
+
+// ReadFileLimited reads one configuration snapshot without ever buffering more
+// than MaxConfigFileSize+1 bytes. The post-read length check protects against
+// special files and size races that make a prior Stat check insufficient.
+func ReadFileLimited(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	if info, statErr := f.Stat(); statErr == nil && info.Mode().IsRegular() && info.Size() > MaxConfigFileSize {
+		return nil, ErrConfigFileTooLarge
+	}
+	data, err := io.ReadAll(io.LimitReader(f, MaxConfigFileSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > MaxConfigFileSize {
+		return nil, ErrConfigFileTooLarge
+	}
+	return data, nil
+}
 
 // LoadFile reads, strictly decodes, validates, and resolves a configuration.
 // It is side-effect free: no listeners are bound and no downstream processes
 // or network connections are started.
 func LoadFile(configPath string) (*Config, *ResolvedConfig, error) {
-	data, err := os.ReadFile(configPath)
+	data, err := ReadFileLimited(configPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read config file %q: %w", configPath, err)
 	}

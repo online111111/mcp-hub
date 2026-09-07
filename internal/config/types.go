@@ -17,6 +17,7 @@ const (
 	MaxRecentCalls        = 200
 	MinConcurrency        = 1
 	MaxConcurrency        = 64
+	MinAuthTokenLength    = 32
 )
 
 // ServerType represents the transport protocol for a downstream MCP server.

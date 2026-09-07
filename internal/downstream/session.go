@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"mcp-hub/internal/buildinfo"
 	"mcp-hub/internal/catalog"
 )
 
@@ -103,8 +104,8 @@ func dialTransport(
 ) (*Session, error) {
 	if clientInfo == nil {
 		clientInfo = &mcp.Implementation{
-			Name:    "mcp-hub",
-			Version: "1.0.0",
+			Name:    buildinfo.Name,
+			Version: buildinfo.Version,
 		}
 	}
 

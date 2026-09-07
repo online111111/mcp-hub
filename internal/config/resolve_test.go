@@ -131,8 +131,8 @@ func TestResolve_EnvAndSecretExpansion(t *testing.T) {
 }
 
 func TestResolve_DoesNotInheritHubAuthSecretsIntoStdioEnv(t *testing.T) {
-	t.Setenv("MCP_HUB_TOKEN", "hub-mcp-secret")
-	t.Setenv("MCP_HUB_ADMIN_TOKEN", "hub-admin-secret")
+	t.Setenv("MCP_HUB_TOKEN", "hub-mcp-secret-0123456789-0123456789")
+	t.Setenv("MCP_HUB_ADMIN_TOKEN", "hub-admin-secret-0123456789-0123456789")
 
 	cfg := &config.Config{
 		Version: 1,
@@ -162,7 +162,7 @@ func TestResolve_DoesNotInheritHubAuthSecretsIntoStdioEnv(t *testing.T) {
 	if _, ok := env["MCP_HUB_ADMIN_TOKEN"]; ok {
 		t.Fatal("stdio environment inherited MCP_HUB_ADMIN_TOKEN")
 	}
-	if got := env["EXPLICIT_SHARED_SECRET"]; got != "hub-mcp-secret" {
+	if got := env["EXPLICIT_SHARED_SECRET"]; got != "hub-mcp-secret-0123456789-0123456789" {
 		t.Fatalf("explicit server env should still be allowed, got %q", got)
 	}
 }

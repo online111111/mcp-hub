@@ -56,48 +56,61 @@ func (pp *posixProcess) Wait() error {
 func (pp *posixProcess) Close() error {
 	var err error
 	pp.closeOnce.Do(func() {
-		// 1. Close protocol input first
 		if pp.stdin != nil {
 			_ = pp.stdin.Close()
 		}
 
 		pid := pp.Pid()
-		pgid := pid // Process group id equals child pid because Setpgid: true
+		pgid := pid // Process group id equals child pid because Setpgid: true.
 
-		// 2. Wait up to gracePeriod for graceful exit
-		waitDone := make(chan struct{})
-		go func() {
-			_ = pp.waitInternal()
-			close(waitDone)
-		}()
-
+		// Give the root process a chance to exit naturally after stdin closes.
+		// Even if it exits early, descendants may still be alive in the process
+		// group; the group must therefore be checked independently of cmd.Wait.
 		select {
-		case <-waitDone:
-			// Terminated gracefully within grace period
+		case <-pp.doneChan:
 		case <-time.After(pp.gracePeriod):
-			// 3. Send SIGTERM to process group
-			if pgid > 0 {
-				_ = syscall.Kill(-pgid, syscall.SIGTERM)
-			}
-			select {
-			case <-waitDone:
-			case <-time.After(pp.gracePeriod):
-				// 4. Send SIGKILL to process group if SIGTERM didn't work
-				if pgid > 0 {
-					_ = syscall.Kill(-pgid, syscall.SIGKILL)
-				}
-				<-waitDone
+		}
+
+		if processGroupAlive(pgid) {
+			_ = syscall.Kill(-pgid, syscall.SIGTERM)
+			if !waitForProcessGroupExit(pgid, pp.gracePeriod) {
+				_ = syscall.Kill(-pgid, syscall.SIGKILL)
+				_ = waitForProcessGroupExit(pgid, pp.gracePeriod)
 			}
 		}
 
-		// 5. Close stdout pipe
+		// Reap the root even when group cleanup was required. waitInternal is
+		// already running from startPlatform and caches the result.
+		<-pp.doneChan
+
 		if pp.stdout != nil {
 			_ = pp.stdout.Close()
 		}
-
 		err = pp.waitErr
 	})
 	return err
+}
+
+func processGroupAlive(pgid int) bool {
+	if pgid <= 0 {
+		return false
+	}
+	err := syscall.Kill(-pgid, 0)
+	return err == nil || err == syscall.EPERM
+}
+
+func waitForProcessGroupExit(pgid int, timeout time.Duration) bool {
+	if timeout <= 0 {
+		timeout = time.Second
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if !processGroupAlive(pgid) {
+			return true
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return !processGroupAlive(pgid)
 }
 
 func startPlatform(ctx context.Context, spec Spec, opts LaunchOptions) (Process, error) {

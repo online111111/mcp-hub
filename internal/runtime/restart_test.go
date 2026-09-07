@@ -53,9 +53,12 @@ func TestReloadNowFailureUpdatesDiagnostics(t *testing.T) {
 
 func TestStartupBoundSettingsRequireRestart(t *testing.T) {
 	cases := map[string]func(*config.HubConfig){
-		"bearer token":    func(h *config.HubConfig) { h.Auth.BearerToken = "new-bearer-secret" },
-		"admin token":     func(h *config.HubConfig) { h.Admin.Token = "new-admin-secret" },
-		"admin enabled":   func(h *config.HubConfig) { h.Admin.Enabled = true; h.Admin.Token = "new-admin-secret" },
+		"bearer token": func(h *config.HubConfig) { h.Auth.BearerToken = "new-bearer-secret-0123456789-0123456789" },
+		"admin token":  func(h *config.HubConfig) { h.Admin.Token = "new-admin-secret-0123456789-0123456789" },
+		"admin enabled": func(h *config.HubConfig) {
+			h.Admin.Enabled = true
+			h.Admin.Token = "new-admin-secret-0123456789-0123456789"
+		},
 		"session timeout": func(h *config.HubConfig) { h.Admin.SessionTimeout = "2h" },
 		"proxy trust":     func(h *config.HubConfig) { h.TrustedProxies = []string{"127.0.0.0/8"} },
 		"allowed hosts":   func(h *config.HubConfig) { h.AllowedHosts = []string{"example.com"} },
@@ -64,7 +67,7 @@ func TestStartupBoundSettingsRequireRestart(t *testing.T) {
 			h.PublicMode = true
 			h.AllowedHosts = []string{"example.com"}
 			h.PublicURL = "https://example.com"
-			h.Auth.BearerToken = "new-bearer-secret"
+			h.Auth.BearerToken = "new-bearer-secret-0123456789-0123456789"
 		},
 	}
 	for name, change := range cases {

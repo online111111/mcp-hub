@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.1'
+          cache: true
+      - name: Verify tag and source version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          grep -Fq "Version   = \"${version}\"" internal/buildinfo/buildinfo.go
+          go test -count=1 -timeout 180s ./...
+          go vet ./...
+          (cd verification/sdkprobe && go test -count=1 -timeout 120s ./...)
+      - name: Build release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          mkdir -p dist stage
+          for target in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            name="mcp-hub-${version}-${goos}-${goarch}"
+            bin="mcp-hub"
+            if [ "$goos" = windows ]; then bin="mcp-hub.exe"; fi
+            rm -rf stage/*
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath \
+              -ldflags="-s -w -X mcp-hub/internal/buildinfo.Version=${version} -X mcp-hub/internal/buildinfo.Commit=${GITHUB_SHA} -X mcp-hub/internal/buildinfo.BuildDate=${build_date}" \
+              -o "stage/${bin}" ./cmd/mcp-hub
+            cp README.md "stage/README.md"
+            if [ "$goos" = windows ]; then
+              (cd stage && zip -q "../dist/${name}.zip" "$bin" README.md)
+            else
+              tar -C stage -czf "dist/${name}.tar.gz" "$bin" README.md
+            fi
+          done
+          (cd dist && sha256sum mcp-hub-* > SHA256SUMS)
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes dist/*

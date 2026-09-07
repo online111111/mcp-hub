@@ -51,6 +51,12 @@ func Resolve(cfg *Config, configDir string, lookupEnv func(string) (string, bool
 	if cfg.Hub.Admin.Enabled && strings.TrimSpace(adminToken) == "" {
 		return nil, fmt.Errorf("hub admin token must not be empty after expansion")
 	}
+	if cfg.Hub.PublicMode && len(strings.TrimSpace(bearerToken)) < MinAuthTokenLength {
+		return nil, fmt.Errorf("hub auth bearer token must be at least %d characters after expansion", MinAuthTokenLength)
+	}
+	if cfg.Hub.Admin.Enabled && len(strings.TrimSpace(adminToken)) < MinAuthTokenLength {
+		return nil, fmt.Errorf("hub admin token must be at least %d characters after expansion", MinAuthTokenLength)
+	}
 	if cfg.Hub.Admin.Enabled && bearerToken != "" && bearerToken == adminToken {
 		return nil, fmt.Errorf("hub MCP and admin tokens must be distinct")
 	}

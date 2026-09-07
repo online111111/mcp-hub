@@ -245,7 +245,7 @@ func TestCLI_Version(t *testing.T) {
 	if code := Run([]string{"version"}, &stdout, &stderr); code != ExitSuccess {
 		t.Fatalf("version exited with %d: %s", code, stderr.String())
 	}
-	if got := strings.TrimSpace(stdout.String()); got != "mcp-hub 0.3.0" {
+	if got := strings.TrimSpace(stdout.String()); got != "mcp-hub 0.4.0" {
 		t.Fatalf("unexpected version output %q", got)
 	}
 }

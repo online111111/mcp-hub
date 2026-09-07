@@ -36,6 +36,11 @@ const (
 	// InitReadDeadline is the bounded timeout for reading the initial unauthenticated session POST body.
 	InitReadDeadline = 5 * time.Second
 
+	// SessionPOSTReadDeadline prevents an authenticated existing session from
+	// pinning a handler indefinitely by slow-dripping a POST body. SSE GET
+	// streams are intentionally unaffected.
+	SessionPOSTReadDeadline = 15 * time.Second
+
 	// latestStatefulProtocol is the newest MCP revision supported by this
 	// stateful Streamable HTTP endpoint. MCP 2026-07-28 requires stateless HTTP;
 	// rejecting the modern discovery probe makes v1.7+ clients negotiate down
@@ -440,12 +445,17 @@ func (s *HTTPServer) handleMCP(w http.ResponseWriter, req *http.Request) {
 	sessionID := req.Header.Get("Mcp-Session-Id")
 	isInitPOST := (req.Method == http.MethodPost && sessionID == "")
 
-	if isInitPOST {
-		// Enforce 5s request body read deadline to avoid slow clients tying up init lock
+	if req.Method == http.MethodPost {
+		deadline := SessionPOSTReadDeadline
+		if isInitPOST {
+			deadline = InitReadDeadline
+		}
 		rc := http.NewResponseController(w)
-		_ = rc.SetReadDeadline(time.Now().Add(InitReadDeadline))
+		_ = rc.SetReadDeadline(time.Now().Add(deadline))
 		defer rc.SetReadDeadline(time.Time{})
+	}
 
+	if isInitPOST {
 		s.initMu.Lock()
 		defer s.initMu.Unlock()
 
