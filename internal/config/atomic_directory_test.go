@@ -17,7 +17,13 @@ func TestAtomicWriteCreatesMissingParent(t *testing.T) {
 	if err != nil || string(got) != string(data) {
 		t.Fatalf("readback: %q, %v", got, err)
 	}
-	if _, err := os.Stat(path + ".lock"); !os.IsNotExist(err) {
-		t.Fatalf("lock not cleaned up: %v", err)
+	if _, err := os.Stat(path + ".lock"); err != nil {
+		t.Fatalf("persistent lock file missing: %v", err)
 	}
+
+	unlock, err := config.AcquireLock(path)
+	if err != nil {
+		t.Fatalf("persistent lock file should be unlocked after write: %v", err)
+	}
+	unlock()
 }
