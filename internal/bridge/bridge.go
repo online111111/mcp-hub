@@ -306,7 +306,7 @@ func RunWithOptions(ctx context.Context, opts Options) error {
 
 	// Normal client disconnection (e.g. EOF on stdin or a closed pipe) settles
 	// cleanly. The SDK may surface the underlying pipe close instead of io.EOF.
-	if serverErr == nil || errors.Is(serverErr, io.EOF) || errors.Is(serverErr, io.ErrClosedPipe) || errors.Is(serverErr, context.Canceled) {
+	if isNormalLocalDisconnect(serverErr) {
 		return nil
 	}
 
