@@ -7,11 +7,11 @@ import (
 	"strings"
 )
 
-// ValidateHubEndpoint enforces the transport policy for clients connecting to
-// this Hub: HTTPS may be remote; plaintext HTTP is restricted to loopback.
-// URL credentials, query strings and fragments are rejected because they can
-// leak through diagnostics and are not part of the Hub endpoint contract.
-func ValidateHubEndpoint(raw string) (*url.URL, error) {
+// ValidateMCPHTTPURL enforces the common transport security policy for MCP HTTP
+// connections. HTTPS may be remote; plaintext HTTP is restricted to loopback.
+// Userinfo and fragments are rejected. Query strings remain permitted because
+// third-party MCP endpoints may legitimately use them.
+func ValidateMCPHTTPURL(raw string) (*url.URL, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil, fmt.Errorf("endpoint URL must not be empty")
@@ -26,9 +26,6 @@ func ValidateHubEndpoint(raw string) (*url.URL, error) {
 	if u.User != nil {
 		return nil, fmt.Errorf("endpoint URL userinfo is forbidden")
 	}
-	if u.RawQuery != "" || u.ForceQuery {
-		return nil, fmt.Errorf("endpoint URL query is forbidden")
-	}
 	if u.Fragment != "" {
 		return nil, fmt.Errorf("endpoint URL fragment is forbidden")
 	}
@@ -38,12 +35,26 @@ func ValidateHubEndpoint(raw string) (*url.URL, error) {
 		return u, nil
 	case "http":
 		if !isLoopbackHost(u.Hostname()) {
-			return nil, fmt.Errorf("plaintext HTTP endpoint is only permitted for loopback hosts; use HTTPS for remote Hub connections")
+			return nil, fmt.Errorf("plaintext HTTP endpoint is only permitted for loopback hosts; use HTTPS for remote connections")
 		}
 		return u, nil
 	default:
 		return nil, fmt.Errorf("unsupported endpoint scheme %q", u.Scheme)
 	}
+}
+
+// ValidateHubEndpoint is intentionally stricter than the generic downstream
+// policy. User-supplied Hub CLI/bridge endpoints may be echoed in diagnostics,
+// so query strings are not accepted as part of the Hub endpoint contract.
+func ValidateHubEndpoint(raw string) (*url.URL, error) {
+	u, err := ValidateMCPHTTPURL(raw)
+	if err != nil {
+		return nil, err
+	}
+	if u.RawQuery != "" || u.ForceQuery {
+		return nil, fmt.Errorf("endpoint URL query is forbidden")
+	}
+	return u, nil
 }
 
 func isLoopbackHost(host string) bool {
