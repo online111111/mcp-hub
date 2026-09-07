@@ -97,12 +97,12 @@ func Resolve(cfg *Config, configDir string, lookupEnv func(string) (string, bool
 		Servers:             make(map[string]ResolvedServer, len(cfg.MCPServers)),
 	}
 
-	// Downstream stdio servers inherit the Hub process environment for PATH and
-	// runtime discovery, but the Hub's own authentication secrets must never be
-	// inherited implicitly. A server can still receive the same value
-	// intentionally through its explicit env configuration.
-	baseEnv := filterInheritedSecrets(os.Environ(), bearerToken, adminToken)
+	// Downstream stdio servers receive only a compatibility baseline from the
+	// Hub process environment. Secrets and service credentials are never
+	// inherited implicitly; users can opt a variable in explicitly with
+	// server.env, including via ${NAME} expansion.
 	isWindows := runtime.GOOS == "windows"
+	baseEnv := safeInheritedEnv(filterInheritedSecrets(os.Environ(), bearerToken, adminToken), isWindows)
 
 	for id, s := range cfg.MCPServers {
 		rs := ResolvedServer{
