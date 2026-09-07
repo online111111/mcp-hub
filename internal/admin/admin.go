@@ -49,6 +49,9 @@ type Options struct {
 	SessionTimeout time.Duration
 	Status         StatusProvider
 	Reload         ReloadFunc
+	// ConfigTransaction must use the same serialization domain as file polling.
+	// Its callback receives a reload function that does not reacquire that lock.
+	ConfigTransaction func(func(func(context.Context) error))
 }
 
 type session struct {
@@ -68,6 +71,7 @@ type Handler struct {
 	opts       Options
 	origin     string
 	trusted    []*net.IPNet
+	writeMu    sync.Mutex // standalone fallback; never hold the session mutex during reload
 	mu         sync.Mutex
 	sessions   map[string]session
 	loginLimit map[string]loginWindow
@@ -297,6 +301,12 @@ func (h *Handler) getConfig(w http.ResponseWriter) {
 }
 
 func (h *Handler) putServer(w http.ResponseWriter, r *http.Request, id string) {
+	h.withConfigTransaction(func(reload func(context.Context) error) {
+		h.putServerLocked(w, r, id, reload)
+	})
+}
+
+func (h *Handler) putServerLocked(w http.ResponseWriter, r *http.Request, id string, reload func(context.Context) error) {
 	var incoming config.ServerConfig
 	if err := decodeJSONBody(r, &incoming); err != nil {
 		http.Error(w, "invalid server configuration", http.StatusBadRequest)
@@ -322,10 +332,16 @@ func (h *Handler) putServer(w http.ResponseWriter, r *http.Request, id string) {
 		cfg.MCPServers = make(map[string]config.ServerConfig)
 	}
 	cfg.MCPServers[id] = incoming
-	h.writeConfig(w, r, cfg, digest)
+	h.writeConfigLocked(w, r, cfg, digest, reload)
 }
 
 func (h *Handler) deleteServer(w http.ResponseWriter, r *http.Request, id string) {
+	h.withConfigTransaction(func(reload func(context.Context) error) {
+		h.deleteServerLocked(w, r, id, reload)
+	})
+}
+
+func (h *Handler) deleteServerLocked(w http.ResponseWriter, r *http.Request, id string, reload func(context.Context) error) {
 	cfg, digest, err := h.readRawConfig()
 	if err != nil {
 		http.Error(w, "configuration unavailable", http.StatusInternalServerError)
@@ -340,10 +356,26 @@ func (h *Handler) deleteServer(w http.ResponseWriter, r *http.Request, id string
 		return
 	}
 	delete(cfg.MCPServers, id)
-	h.writeConfig(w, r, cfg, digest)
+	h.writeConfigLocked(w, r, cfg, digest, reload)
+}
+
+func (h *Handler) withConfigTransaction(fn func(func(context.Context) error)) {
+	if h.opts.ConfigTransaction != nil {
+		h.opts.ConfigTransaction(fn)
+		return
+	}
+	h.writeMu.Lock()
+	defer h.writeMu.Unlock()
+	fn(h.opts.Reload)
 }
 
 func (h *Handler) writeConfig(w http.ResponseWriter, r *http.Request, cfg *config.Config, digest string) {
+	h.withConfigTransaction(func(reload func(context.Context) error) {
+		h.writeConfigLocked(w, r, cfg, digest, reload)
+	})
+}
+
+func (h *Handler) writeConfigLocked(w http.ResponseWriter, r *http.Request, cfg *config.Config, digest string, reload func(context.Context) error) {
 	if err := config.Validate(cfg); err != nil {
 		http.Error(w, "configuration validation failed: "+err.Error(), http.StatusBadRequest)
 		return
@@ -377,9 +409,9 @@ func (h *Handler) writeConfig(w http.ResponseWriter, r *http.Request, cfg *confi
 		return
 	}
 	newDigest := config.ComputeDigest(data)
-	if h.opts.Reload != nil {
+	if reload != nil {
 		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-		err = h.opts.Reload(ctx)
+		err = reload(ctx)
 		cancel()
 		if err != nil {
 			if rollbackErr := config.WriteConfigFileAtomic(h.opts.ConfigPath, previous, newDigest); rollbackErr != nil {
@@ -387,7 +419,7 @@ func (h *Handler) writeConfig(w http.ResponseWriter, r *http.Request, cfg *confi
 				return
 			}
 			restoreCtx, restoreCancel := context.WithTimeout(context.Background(), 15*time.Second)
-			restoreErr := h.opts.Reload(restoreCtx)
+			restoreErr := reload(restoreCtx)
 			restoreCancel()
 			if restoreErr != nil {
 				http.Error(w, "configuration change was rolled back but runtime restoration failed", http.StatusServiceUnavailable)

@@ -29,7 +29,7 @@ MCP Hub reads one strict JSON configuration file. The file is the source of trut
 
 A stdio server requires `command`. It may also specify `args`, `cwd`, and `env`; it must not specify `url` or `headers`.
 
-Relative `cwd` and command paths containing a path separator are resolved against the directory containing the configuration file. Arguments are passed without shell parsing or rewriting. The downstream process inherits the Hub environment and then receives the configured `env` overrides.
+Relative `cwd` and command paths containing a path separator are resolved against the directory containing the configuration file. Arguments are passed without shell parsing or rewriting. The downstream process inherits the Hub environment with Hub authentication secrets filtered out, then receives the configured `env` overrides. Explicitly configuring a secret in downstream `env` intentionally passes it to that trusted process.
 
 ## Streamable HTTP servers
 
@@ -37,7 +37,7 @@ A `streamable_http` server requires `url`. It may specify `headers`, but not `co
 
 HTTPS URLs are accepted for remote services. Plain HTTP is restricted to literal loopback hosts. URL userinfo and fragments are rejected. Redirects are not followed. Transport-owned headers such as `Host`, `Content-Length`, `Connection`, `Mcp-Session-Id`, and `Mcp-Protocol-Version` cannot be configured.
 
-Header and stdio environment values support one-pass `${NAME}` expansion. `$${NAME}` produces the literal `${NAME}`. Missing variables fail `validate`/`serve`; expansion never writes secrets back to the file.
+Header and stdio environment values support one-pass `${NAME}` expansion. `$${NAME}` produces the literal `${NAME}`. Missing variables fail `validate`/`serve`; expansion never writes secrets back to the file. Required Hub tokens must remain non-empty after expansion, and enabled admin credentials must differ from the MCP bearer token.
 
 ## Timeouts and limits
 
@@ -48,7 +48,7 @@ Header and stdio environment values support one-pass `${NAME}` expansion. `$${NA
 - Maximum configured servers: 32.
 - `tools.disabled` is a list of original downstream names. New tools are open by default.
 
-Connection-level changes (command, args, cwd, env, URL, headers, transport, startup timeout, or concurrency) use break-before-make: the old generation drains and closes before the new one connects. A call already admitted remains on its original generation. A call-timeout-only change affects new calls without changing the generation. A listen-address change is reported as `restart_required` and is not hot-swapped.
+Connection-level changes (command, args, cwd, env, URL, headers, transport, startup timeout, or concurrency) use break-before-make: the old generation drains and closes before the new one connects. A call already admitted remains on its original generation. A call-timeout-only change affects new calls without changing the generation. Startup-bound settings (listen address, public mode/URL, allowed hosts, trusted proxies, MCP bearer token, admin enablement/token/session timeout) require a process restart and are not hot-swapped. A successful downstream reload does **not** revoke the old authentication tokens; restart the Hub to apply credential changes.
 
 ## Import and writes
 

@@ -30,6 +30,16 @@ jobs:
         run: |
           node --check internal/admin/web/app.js
           node --test internal/admin/webtest/*.test.mjs
+      - name: Install browser regression dependencies
+        if: runner.os == 'Linux'
+        working-directory: internal/admin/browsertest
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Chromium UI regressions (stubbed API)
+        if: runner.os == 'Linux'
+        working-directory: internal/admin/browsertest
+        run: npm test
       - name: Test
         run: go test -count=1 -timeout 180s ./...
       - name: Race test
@@ -39,5 +49,10 @@ jobs:
       - name: SDK probe
         working-directory: verification/sdkprobe
         run: go test -race -count=1 -timeout 90s ./...
+      - name: Integrated Chromium smoke (real Hub)
+        if: runner.os == 'Linux'
+        run: |
+          go build -trimpath -o dist/mcp-hub ./cmd/mcp-hub
+          node internal/admin/browsertest/live-smoke.mjs
       - name: Build
         run: go build -trimpath -ldflags="-s -w" ./cmd/mcp-hub

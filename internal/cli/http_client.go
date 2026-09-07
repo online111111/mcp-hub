@@ -42,5 +42,12 @@ func newHubHTTPClient(token string, timeout time.Duration) *http.Client {
 	return &http.Client{
 		Transport: bearerTransport{token: token},
 		Timeout:   timeout,
+		// bearerTransport adds credentials on every request, including redirects.
+		// Never follow a response-selected URL, even on the same origin. Return
+		// the original response so diagnostics report its non-OK status and the
+		// caller remains responsible for closing its body.
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
 	}
 }

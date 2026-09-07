@@ -6,7 +6,9 @@ endpoint to IDEs, agents, and stdio-only clients.
 
 The v0.3 refactor separates configuration loading, live-runtime control,
 protocol routing, and the admin UI. The admin console is usable in both local
-and reverse-proxied public mode and has its own browser-level regression suite.
+and reverse-proxied public mode. Pure JavaScript helper tests and Go HTTP/static
+asset tests cover specific contracts; they do not by themselves prove complete
+browser login, editing, duplication, or JSON-mode workflows.
 
 ## What it provides
 
@@ -14,7 +16,7 @@ and reverse-proxied public mode and has its own browser-level regression suite.
 - Managed stdio children and remote Streamable HTTP downstreams.
 - Stable public tool names and explicit, no-replay request routing.
 - Strict JSON configuration with atomic compare-and-swap writes.
-- Hot reload for downstream changes and restart detection for listener changes.
+- Hot reload for downstream changes and restart detection for startup-bound settings.
 - A responsive `/admin/` console for status, calls, and server configuration.
 - Loopback-safe local mode and an explicit authenticated public mode.
 - A stdio bridge for clients that cannot connect to HTTP MCP endpoints.
@@ -112,8 +114,9 @@ package boundaries and invariants.
 ## Development and verification
 
 The module targets Go 1.25 and CI builds with the patched Go 1.26.6 toolchain.
-The production binary has no Node.js runtime dependency; Node is used only for
-the admin UI's zero-dependency tests.
+The production binary has no Node.js runtime dependency. Pure helper tests use
+Node without dependencies; optional Chromium UI regressions use a pinned
+Playwright development dependency.
 
 ```bash
 go test -count=1 -timeout 180s ./...
@@ -123,6 +126,30 @@ node --check internal/admin/web/app.js
 node --test internal/admin/webtest/*.test.mjs
 go build -trimpath -ldflags="-s -w" -o dist/mcp-hub ./cmd/mcp-hub
 ```
+
+Chromium UI regressions (production DOM/modules, **stubbed admin API**):
+
+```bash
+cd internal/admin/browsertest
+npm ci
+npx playwright install --with-deps chromium
+npm test
+```
+
+These tests check browser interactions and outgoing payloads, not real-backend
+cookie issuance, CSRF enforcement, or disk/runtime persistence. Those boundaries
+need the Go API tests and the narrower integrated smoke test below. It runs a
+real local Hub with disabled fixture downstreams (no third-party processes),
+verifies login cookies, editing/JSON payload persistence, secret duplication,
+and missing-CSRF rejection:
+
+```bash
+# From repository root, after installing the browser dependencies above:
+go build -trimpath -o dist/mcp-hub ./cmd/mcp-hub
+node internal/admin/browsertest/live-smoke.mjs
+```
+
+This is not a reverse-proxy/public-mode or GUI MCP-client compatibility test.
 
 The independent SDK probe lives in `verification/sdkprobe` and must be tested
 from that directory. GitHub Actions runs Go tests, race tests, vet, the SDK

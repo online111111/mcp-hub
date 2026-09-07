@@ -324,17 +324,13 @@
                 >推荐使用绝对路径，避免不同运行环境下 PATH 不一致。</small
               ></label
             >
-            <label class="field"
-              ><span>参数</span
-              ><textarea
-                id="args"
-                rows="4"
-                placeholder="每行一个参数，例如：&#10;-y&#10;@modelcontextprotocol/server-memory"
-              ></textarea
-              ><small
-                >每行会作为一个独立参数传给进程，不需要额外加引号。</small
-              ></label
-            >
+            <div class="kv-block">
+              <div class="kv-head">
+                <div><strong>参数</strong><small>逐项编辑，保留空项、空格和换行；不需要额外加引号。</small></div>
+                <button id="addArg" class="button tiny secondary" type="button">+ 添加参数</button>
+              </div>
+              <div id="argRows" class="kv-rows"></div>
+            </div>
             <label class="field"
               ><span>工作目录</span
               ><input id="cwd" placeholder="例如 /var/lib/mcp-hub" /><small

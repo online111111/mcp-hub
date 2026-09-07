@@ -16,11 +16,11 @@ client.
 | Process ownership | PASS | native POSIX process groups and Windows Job Object lifecycle implementations with descendant-cleanup tests |
 | Catalog and publication | PASS | deterministic public names, filtering, immutable snapshots, dynamic add/remove, and publish locking |
 | Manager and router | PASS | generations, leases, concurrency, backoff, break-before-make reloads, no-replay calls, and sanitized call records |
-| Live runtime controller | PASS | two-stable-sample file polling, immediate admin reload, invalid-config retention, and listener restart detection |
+| Live runtime controller | PARTIAL | Polling, immediate reload and invalid-config retention exist; reload ordering, rollback concurrency and startup-setting detection require the hardening regressions, not just the original tests |
 | Inbound HTTP | PASS | Host/Origin enforcement, public bearer auth, body/session bounds, stateful MCP, and sanitized diagnostics |
 | stdio bridge | PASS | authenticated three-hop forwarding, dynamic tool sync, cancellation, failure exit, and stdout purity |
 | Admin API | PASS | local/public same-origin login, bounded sessions/rates, CSRF, strict JSON, secret placeholders, ETag/CAS writes, and security headers |
-| Admin browser UI | PASS | CSP-compatible module events, form/JSON editing, secret preservation, filtering, responsive layout, and pure helper tests |
+| Admin browser UI | PARTIAL | Pure helper tests and Go static/HTTP checks cover specific contracts, not complete browser workflows; see the hardening report for separately exercised browser scenarios |
 | CLI diagnostics | PASS | local and authenticated public `status`/`doctor`; doctor initializes MCP and lists tools without a persistent SSE stream |
 | Release packaging | PARTIAL | native Linux build verified in development; versioned release binaries and checksums must be produced by a release workflow |
 
@@ -74,12 +74,22 @@ the admin UI tests on Ubuntu.
 | Environment or client | Status | Notes |
 |---|---|---|
 | Linux amd64 | PASS | native tests, race tests, vet, build, MCP smoke test, and POSIX descendant cleanup were exercised |
-| Windows amd64 | PASS | native tests, build, Job Object lifecycle, and a real stdio child were exercised |
+| Windows amd64 | PARTIAL | The pre-hardening CI passed native tests and lifecycle checks; changes in this hardening branch require a fresh Windows CI run |
 | macOS | NOT_RUN | CI does not currently include a macOS runner |
 | Cursor | NOT_RUN | no exact installed version was supplied for an end-to-end exercise |
 | Claude Desktop | NOT_RUN | no exact installed version was supplied for an end-to-end exercise |
 | Arbitrary third-party MCP servers | NOT_RUN | compatibility depends on each server's protocol behavior and runtime dependencies |
 
+## Merge and release gates
+
+| Remaining work | Blocks this hardening merge? | Required boundary |
+|---|---|---|
+| Release packaging (`PARTIAL`) | No | Before a formal v0.3 release, build binaries from the exact tag and publish matching checksums. CI build success is not a release workflow or a published release. |
+| Native macOS (`NOT_RUN`) | No | Do not claim verified macOS support until native tests and lifecycle checks are recorded. Cross-compilation is not native validation. |
+| Cursor / Claude Desktop (`NOT_RUN`) | Usually no | Before claiming client compatibility, record exact versions and exercise connect, list tools, and call tools end to end. |
+| Arbitrary MCP servers (`NOT_RUN`) | No | Exhaustive compatibility is impossible; maintain a representative stdio and Streamable HTTP matrix with exact versions. SDK fixtures alone are not third-party compatibility proof. |
+| Credential redirects and reload ordering | Yes | Regression tests must reject redirect credential forwarding and cover serialized reload plus real-Manager rollback under polling. Race detection alone cannot prove logical ordering. |
+
 Release artifacts are intentionally not tracked as stale binaries or checksum
 files. Generate both from the exact tagged commit and publish the checksums with
-the release.
+the release. No release has been published as part of this hardening work.

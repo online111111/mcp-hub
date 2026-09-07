@@ -21,6 +21,11 @@ var (
 		"mcp-protocol-version": {},
 		"transfer-encoding":    {},
 		"upgrade":              {},
+		"trailer":              {},
+		"te":                   {},
+		"keep-alive":           {},
+		"proxy-authorization":  {},
+		"proxy-connection":     {},
 	}
 )
 
@@ -47,7 +52,7 @@ func Validate(cfg *Config) error {
 			return fmt.Errorf("hub.publicUrl is required when publicMode is enabled")
 		}
 		u, err := url.Parse(cfg.Hub.PublicURL)
-		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Opaque != "" || (u.Path != "" && u.Path != "/") || u.RawPath != "" || u.RawQuery != "" || u.ForceQuery || strings.Contains(cfg.Hub.PublicURL, "#") {
 			return fmt.Errorf("hub.publicUrl must be an origin-only https URL")
 		}
 		if len(cfg.Hub.AllowedHosts) == 0 {
@@ -235,6 +240,9 @@ func validateHTTPURL(rawURL string) error {
 		return fmt.Errorf("invalid url: %w", err)
 	}
 
+	if u.Hostname() == "" || u.Opaque != "" {
+		return fmt.Errorf("url must contain a host")
+	}
 	if u.User != nil {
 		return fmt.Errorf("url userinfo is forbidden")
 	}

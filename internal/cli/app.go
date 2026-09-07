@@ -142,7 +142,7 @@ func runServe(args []string, stdout, stderr io.Writer, stopCh <-chan struct{}) i
 	}
 
 	// 5. Initialize Adapter and start reload loop
-	controller := hubruntime.NewController(mgr, *configPath, resolved.Listen, nil)
+	controller := hubruntime.NewController(mgr, *configPath, resolved.Listen, nil, resolved)
 	controller.Start(mgrCtx, time.Second)
 
 	// 6. Initialize optional embedded admin UI and inbound HTTP server.
@@ -166,6 +166,7 @@ func runServe(args []string, stdout, stderr io.Writer, stopCh <-chan struct{}) i
 				}
 			},
 			Reload: controller.ReloadNow,
+			ConfigTransaction: controller.WithConfigTransaction,
 		})
 		if adminErr != nil {
 			fmt.Fprintf(stderr, "failed to initialize admin UI: %v\n", adminErr)

@@ -86,6 +86,12 @@ func AcquireLock(configPath string) (func(), error) {
 // WriteConfigFileAtomic writes data to path atomically using a temporary file in the same directory,
 // protected by an exclusive lock file and optional CAS expectedDigest check.
 func WriteConfigFileAtomic(path string, data []byte, expectedDigest string) error {
+	// The sibling lock must have a parent before acquisition, just like the
+	// temporary file. Creating it after AcquireLock made first writes fail.
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory %q: %w", dir, err)
+	}
 	unlock, err := AcquireLock(path)
 	if err != nil {
 		return err
@@ -105,11 +111,6 @@ func WriteConfigFileAtomic(path string, data []byte, expectedDigest string) erro
 		if actualDigest != expectedDigest {
 			return ErrDigestMismatch{Expected: expectedDigest, Actual: actualDigest}
 		}
-	}
-
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory %q: %w", dir, err)
 	}
 
 	// Create temporary file in the exact same directory to ensure same filesystem / drive

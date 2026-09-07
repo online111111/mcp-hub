@@ -10,6 +10,13 @@ var forbiddenHeaders = map[string]struct{}{
 	"host":                 {},
 	"content-length":       {},
 	"connection":           {},
+	"transfer-encoding":    {},
+	"upgrade":              {},
+	"trailer":              {},
+	"te":                   {},
+	"keep-alive":           {},
+	"proxy-authorization":  {},
+	"proxy-connection":     {},
 	"mcp-session-id":       {},
 	"mcp-protocol-version": {},
 }

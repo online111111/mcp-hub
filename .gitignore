@@ -19,6 +19,11 @@ admin-smoke-config.json
 *.exe
 *.test
 
+# Browser test dependencies and reports
+node_modules/
+playwright-report/
+test-results/
+
 # Go tooling
 coverage.out
 *.prof

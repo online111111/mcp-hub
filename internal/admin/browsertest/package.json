@@ -1,0 +1,7 @@
+{
+  "name": "mcp-hub-admin-browser-tests",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test admin.test.mjs" },
+  "devDependencies": { "playwright": "1.63.0" }
+}

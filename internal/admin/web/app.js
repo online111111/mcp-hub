@@ -62,6 +62,7 @@ async function api(path, options = {}) {
 }
 
 function showLogin() {
+  $("#editor").close();
   $("#login").classList.remove("hidden");
   $("#app").classList.add("hidden");
   $("#topActions").classList.add("hidden");
@@ -161,7 +162,7 @@ function render(status) {
       ? "部分异常"
       : "运行中";
   $("#healthDetail").textContent = status.restartRequired
-    ? "监听地址变更需要完整重启"
+    ? "监听或认证/安全配置已变更，需要完整重启；旧凭据在重启前仍有效"
     : failed
       ? `${failed} 个服务正在重试`
       : "Hub 正常接受请求";
@@ -285,7 +286,8 @@ function fillForm(serverInput) {
   $("#serverType").value = server.type;
   $("#enabled").checked = server.enabled;
   $("#command").value = server.command;
-  $("#args").value = server.args.join("\n");
+  $("#argRows").replaceChildren();
+  for (const arg of server.args) addArgument(arg);
   $("#cwd").value = server.cwd;
   $("#remoteUrl").value = server.url;
   $("#startupTimeout").value = server.startupTimeout;
@@ -295,6 +297,26 @@ function fillForm(serverInput) {
   renderKeyValues("#envRows", server.env);
   renderKeyValues("#headerRows", server.headers);
   syncTransport();
+}
+
+function addArgument(value = "") {
+  const row = document.createElement("div");
+  row.className = "arg-row";
+  const input = document.createElement("textarea");
+  input.rows = 2;
+  input.setAttribute("aria-label", "参数值");
+  input.value = value;
+  // Textareas normalize CRLF. Preserve the original bytes until this item is edited.
+  input.argumentValue = value;
+  input.addEventListener("input", () => { input.argumentValue = input.value; });
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "remove-kv";
+  remove.setAttribute("aria-label", "删除参数");
+  remove.textContent = "×";
+  remove.addEventListener("click", () => row.remove());
+  row.append(input, remove);
+  $("#argRows").appendChild(row);
 }
 
 function renderKeyValues(selector, entries) {
@@ -329,7 +351,9 @@ function addKeyValue(root, key = "", value = "") {
   const valueInput = document.createElement("input");
   valueInput.className = "kv-value";
   const secret = value === SECRET_SENTINEL;
-  valueInput.placeholder = secret ? "值（留空保留现有 Secret）" : "值";
+  valueInput.placeholder = secret
+    ? (state.editingId ? "值（留空保留现有 Secret）" : "必须重新填写 Secret")
+    : "值";
   valueInput.value = secret ? "" : value;
   valueInput.dataset.secret = secret ? "1" : "0";
   secretWrap.appendChild(valueInput);
@@ -337,7 +361,7 @@ function addKeyValue(root, key = "", value = "") {
   if (secret) {
     const label = document.createElement("span");
     label.className = "kv-secret-label";
-    label.textContent = "SECRET 已设置";
+    label.textContent = state.editingId ? "SECRET 已设置" : "SECRET 必须重新填写";
     secretWrap.appendChild(label);
   }
 
@@ -376,7 +400,7 @@ function collectForm() {
   const server = { enabled: $("#enabled").checked, type };
   if (type === "stdio") {
     server.command = $("#command").value.trim();
-    server.args = nonEmptyLines($("#args").value);
+    server.args = $$("#argRows textarea").map((input) => input.argumentValue);
     if ($("#cwd").value.trim()) server.cwd = $("#cwd").value.trim();
     const env = collectKeyValueRows("#envRows");
     if (Object.keys(env).length) server.env = env;
@@ -424,6 +448,15 @@ function validateServer(id, server) {
   if (!server || typeof server !== "object" || Array.isArray(server)) {
     throw new Error("服务配置必须是 JSON 对象");
   }
+  if (!state.editingId) {
+    for (const field of ["env", "headers"]) {
+      for (const [key, value] of Object.entries(server[field] || {})) {
+        if (value === SECRET_SENTINEL) {
+          throw new Error(`${field}.${key} 是脱敏 Secret，请重新填写或删除这一项`);
+        }
+      }
+    }
+  }
   if (server.type === "stdio" && !String(server.command || "").trim()) {
     throw new Error("stdio 服务必须填写启动命令");
   }
@@ -439,9 +472,14 @@ function syncTransport() {
 }
 
 function setEditorMode(mode) {
-  if (mode === "json") {
-    $("#serverJSON").value = JSON.stringify(collectForm(), null, 2);
-  } else if (state.editorMode === "json") {
+  if (mode === "json" && state.editorMode !== "json") {
+    try {
+      $("#serverJSON").value = JSON.stringify(collectForm(), null, 2);
+    } catch (error) {
+      $("#editorError").textContent = error.message;
+      return;
+    }
+  } else if (mode === "form" && state.editorMode === "json") {
     try {
       fillForm(JSON.parse($("#serverJSON").value));
     } catch {
@@ -529,6 +567,7 @@ $("#servers").addEventListener("click", (event) => {
 $("#addServer").addEventListener("click", () => openEditor());
 $("#addServerHero").addEventListener("click", () => openEditor());
 $("#serverType").addEventListener("change", syncTransport);
+$("#addArg").addEventListener("click", () => addArgument());
 $("#addEnv").addEventListener("click", () => addKeyValue($("#envRows")));
 $("#addHeader").addEventListener("click", () => addKeyValue($("#headerRows")));
 $("#formTab").addEventListener("click", () => setEditorMode("form"));

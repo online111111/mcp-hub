@@ -44,6 +44,16 @@ func Resolve(cfg *Config, configDir string, lookupEnv func(string) (string, bool
 			return nil, fmt.Errorf("hub admin token: %w", err)
 		}
 	}
+	// Validate the effective credentials, not just the non-empty ${NAME} syntax.
+	if cfg.Hub.PublicMode && strings.TrimSpace(bearerToken) == "" {
+		return nil, fmt.Errorf("hub auth bearer token must not be empty after expansion")
+	}
+	if cfg.Hub.Admin.Enabled && strings.TrimSpace(adminToken) == "" {
+		return nil, fmt.Errorf("hub admin token must not be empty after expansion")
+	}
+	if cfg.Hub.Admin.Enabled && bearerToken != "" && bearerToken == adminToken {
+		return nil, fmt.Errorf("hub MCP and admin tokens must be distinct")
+	}
 	adminSessionTimeout := 30 * time.Minute
 	if cfg.Hub.Admin.SessionTimeout != "" {
 		adminSessionTimeout, _ = time.ParseDuration(cfg.Hub.Admin.SessionTimeout)
