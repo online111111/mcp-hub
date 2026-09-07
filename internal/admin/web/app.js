@@ -638,6 +638,23 @@ for (const button of $$(".copy-button")) {
   });
 }
 
+$("#copyAgentPrompt").addEventListener("click", async () => {
+  try {
+    const response = await fetch("/api/admin/v1/agent-prompt", {
+      credentials: "same-origin",
+    });
+    if (response.status === 401) {
+      showLogin();
+      throw new Error("登录已失效，请重新登录");
+    }
+    if (!response.ok) throw new Error("部署 Prompt 暂时不可用");
+    await navigator.clipboard.writeText(await response.text());
+    toast("Agent 部署 Prompt 已复制");
+  } catch (error) {
+    toast(error.message || "浏览器未允许复制，请手动下载 Skill", "error");
+  }
+});
+
 window.setInterval(() => {
   if (!document.hidden && !$("#editor").open) void refreshStatus();
 }, 10_000);
