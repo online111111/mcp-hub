@@ -16,7 +16,9 @@ await new Promise(r => allocator.close(r));
 const origin = `http://127.0.0.1:${port}`;
 const configPath = join(dir, 'config.json');
 const args = ['  padded  ', '', 'normal', 'line1\nline2', ''];
-await writeFile(configPath, JSON.stringify({version:1,hub:{listen:`127.0.0.1:${port}`,admin:{enabled:true,token:'live-smoke-admin'}},mcpServers:{original:{enabled:false,type:'stdio',command:'node',args,env:{API_KEY:'original-secret'}}}}));
+const adminToken = 'live-smoke-admin-token-0000000000000001';
+const rotatedAdminToken = 'rotated-live-admin-token-00000000000001';
+await writeFile(configPath, JSON.stringify({version:1,hub:{listen:`127.0.0.1:${port}`,admin:{enabled:true,token:adminToken}},mcpServers:{original:{enabled:false,type:'stdio',command:'node',args,env:{API_KEY:'original-secret'}}}}));
 const child = spawn(process.env.MCP_HUB_BINARY || join(root, 'dist/mcp-hub'), ['serve','--config',configPath], {stdio:['ignore','pipe','pipe']});
 let spawnError;
 child.on('error', error => { spawnError = error; });
@@ -36,7 +38,7 @@ try {
  const page=await context.newPage();
  const errors=[]; page.on('pageerror',e=>errors.push(e.message));
  await page.goto(`${origin}/admin/`);
- await page.locator('#token').fill('live-smoke-admin');
+ await page.locator('#token').fill(adminToken);
  await page.locator('#loginButton').click();
  await page.locator('[data-action="edit"]').waitFor();
  const cookies=await context.cookies();
@@ -62,7 +64,7 @@ try {
  assert.deepEqual(copied[1].args,args);
  const csrfRejected=await context.request.put(`${origin}/api/admin/v1/servers/original`,{data:saved.mcpServers.original});
  assert.equal(csrfRejected.status(),403);
- saved.hub.admin.token='rotated-live-admin';
+ saved.hub.admin.token=rotatedAdminToken;
  await writeFile(configPath,JSON.stringify(saved));
  await page.waitForFunction(()=>document.querySelector('#health').textContent==='需重启',null,{timeout:20000});
  assert.match(await page.locator('#healthDetail').textContent(),/认证|安全/);
