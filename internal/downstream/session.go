@@ -57,10 +57,10 @@ func DialIO(ctx context.Context, opts IOOptions) (*Session, error) {
 		return nil, err
 	}
 
-	transport := &mcp.IOTransport{
+	transport := &legacyStdioTransport{base: &mcp.IOTransport{
 		Reader: opts.Reader,
 		Writer: opts.Writer,
-	}
+	}}
 
 	return dialTransport(ctx, transport, opts.StartupTimeout, opts.ClientInfo, opts.OnToolListChanged)
 }
