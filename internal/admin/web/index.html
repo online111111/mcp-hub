@@ -91,6 +91,13 @@
             >
               <span>接入</span><small>客户端配置</small>
             </button>
+            <button
+              class="nav-item"
+              data-section="agentDeploySection"
+              type="button"
+            >
+              <span>Agent</span><small>自动部署</small>
+            </button>
           </nav>
           <div class="sidebar-meta">
             <span>版本</span><strong id="hubVersion">—</strong
@@ -247,6 +254,54 @@
               ><span
                 >客户端连接需要 MCP Bearer Token；管理员登录使用的是另一枚 Admin
                 Token，两者不要混用。</span
+              >
+            </div>
+          </section>
+
+          <section id="agentDeploySection" class="panel section-block">
+            <div class="section-heading">
+              <div>
+                <span class="kicker">AGENT DEPLOYMENT</span>
+                <h2>Agent 自动部署</h2>
+                <p>
+                  把内置 Skill 或部署 Prompt 交给支持命令执行/SSH 的 Agent，即可按安全基线部署服务端、客户端或 stdio bridge。
+                </p>
+              </div>
+            </div>
+            <div class="connection-grid">
+              <article class="connection-card">
+                <div class="connection-title">
+                  <div>
+                    <span class="mini-label">完整</span>
+                    <h3>MCP Hub Deployer Skill</h3>
+                  </div>
+                  <a
+                    class="button tiny primary"
+                    href="/api/admin/v1/agent-skill.zip"
+                    download="skill.zip"
+                  >下载 Skill</a>
+                </div>
+                <code>mcp-hub-deployer / skill.zip</code>
+                <p>包含服务端、客户端、升级、验证、回滚流程和带 SHA256 校验的 Release 安装脚本。</p>
+              </article>
+              <article class="connection-card">
+                <div class="connection-title">
+                  <div>
+                    <span class="mini-label">通用</span>
+                    <h3>复制 Agent Prompt</h3>
+                  </div>
+                  <button id="copyAgentPrompt" class="button tiny secondary" type="button">
+                    复制 Prompt
+                  </button>
+                </div>
+                <code>适用于不支持 Skill 的通用 Agent</code>
+                <p>复制后直接发给目标 Agent；有 shell/SSH 时直接部署，没有执行能力时输出精确命令。</p>
+              </article>
+            </div>
+            <div class="notice info">
+              <strong>安全默认值</strong
+              ><span
+                >不会直接暴露 8080；公网部署默认 loopback + HTTPS 反代；修改现有部署前先备份并在失败时回滚。</span
               >
             </div>
           </section>
