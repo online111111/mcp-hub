@@ -18,13 +18,9 @@ import (
 	"mcp-hub/internal/manager"
 )
 
-// ConfigLoader validates and resolves a configuration file.
 type ConfigLoader func([]byte, string) (*config.Config, *config.ResolvedConfig, error)
 
-// Controller owns live reload observation and the public diagnostic view.
 type Controller struct {
-	// transactionMu serializes the entire read/apply/state sequence. Never hold
-	// mu while acquiring this lock or calling Manager.
 	transactionMu   sync.Mutex
 	mu              sync.RWMutex
 	manager         *manager.Manager
@@ -39,8 +35,6 @@ type Controller struct {
 	load            ConfigLoader
 }
 
-// NewController creates a live-reload controller for an already started
-// manager. load is injectable to keep reload state deterministic in tests.
 func NewController(mgr *manager.Manager, configPath, currentListen string, load ConfigLoader, startup ...*config.ResolvedConfig) *Controller {
 	if load == nil {
 		load = func(data []byte, path string) (*config.Config, *config.ResolvedConfig, error) {
@@ -75,12 +69,10 @@ func digest(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// IsReady delegates to the manager's current coordinator snapshot.
 func (c *Controller) IsReady() bool {
 	return c.manager == nil || c.manager.IsReady()
 }
 
-// GetServerStatuses returns sanitized manager status records.
 func (c *Controller) GetServerStatuses() []inbound.ServerStatusDTO {
 	if c.manager == nil {
 		return nil
@@ -88,7 +80,6 @@ func (c *Controller) GetServerStatuses() []inbound.ServerStatusDTO {
 	return c.manager.GetServerStatuses()
 }
 
-// GetRecentCalls returns sanitized recent call records.
 func (c *Controller) GetRecentCalls() []inbound.RecentCallDTO {
 	if c.manager == nil {
 		return nil
@@ -96,23 +87,18 @@ func (c *Controller) GetRecentCalls() []inbound.RecentCallDTO {
 	return c.manager.GetRecentCalls()
 }
 
-// RestartRequired reports whether a successfully applied configuration changed
-// startup-bound listener or HTTP/admin security settings.
 func (c *Controller) RestartRequired() bool {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.restartRequired
 }
 
-// LastReloadStatus returns a non-secret operator-facing reload summary.
 func (c *Controller) LastReloadStatus() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.lastReload
 }
 
-// Start begins stable-sample polling. A changed file must be observed twice so
-// ordinary editors cannot expose a partially written configuration.
 func (c *Controller) Start(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		interval = time.Second
@@ -131,17 +117,12 @@ func (c *Controller) Start(ctx context.Context, interval time.Duration) {
 	}()
 }
 
-// ReloadNow validates and applies the current file immediately after an atomic
-// admin write.
 func (c *Controller) ReloadNow(ctx context.Context) error {
 	c.transactionMu.Lock()
 	defer c.transactionMu.Unlock()
 	return c.reloadNow(ctx)
 }
 
-// WithConfigTransaction runs synchronous file read/write/reload/rollback work.
-// The supplied reload must not escape the callback. Do not call ReloadNow or
-// nest transactions from the callback (the transaction lock is not reentrant).
 func (c *Controller) WithConfigTransaction(fn func(func(context.Context) error)) {
 	c.transactionMu.Lock()
 	defer c.transactionMu.Unlock()
@@ -178,7 +159,6 @@ func (c *Controller) poll(ctx context.Context) {
 	if !c.observeCandidate(fileDigest) {
 		return
 	}
-
 	_, resolved, err := c.load(data, c.configPath)
 	if err != nil {
 		c.reject("reload rejected: invalid configuration")
@@ -207,8 +187,6 @@ func (c *Controller) observeCandidate(fileDigest string) bool {
 }
 
 func (c *Controller) apply(ctx context.Context, resolved *config.ResolvedConfig, fileDigest string) error {
-	// The transaction lock orders Hub writers, but an external editor does not
-	// take it. Discard a snapshot replaced while it was being parsed/resolved.
 	currentDigest, err := config.ComputeFileDigest(c.configPath)
 	if err != nil {
 		return err
@@ -216,6 +194,13 @@ func (c *Controller) apply(ctx context.Context, resolved *config.ResolvedConfig,
 	if currentDigest != fileDigest {
 		return config.ErrDigestMismatch{Expected: fileDigest, Actual: currentDigest}
 	}
+
+	// Startup-bound HTTP/admin credentials remain active until the process is
+	// restarted. A reload may contain new credentials and Resolve has already
+	// filtered those new values from stdio environments, but the old active
+	// values must remain filtered as well during the restart-required window.
+	stripStartupSecrets(resolved, c.startup)
+
 	if c.manager != nil {
 		if err := c.manager.Apply(ctx, resolved); err != nil {
 			return err
@@ -244,6 +229,27 @@ func (c *Controller) apply(ctx context.Context, resolved *config.ResolvedConfig,
 	c.candidateDigest = ""
 	c.candidateCount = 0
 	return nil
+}
+
+func stripStartupSecrets(resolved, startup *config.ResolvedConfig) {
+	if resolved == nil || startup == nil {
+		return
+	}
+	secrets := []string{startup.BearerToken, startup.AdminToken}
+	for id, srv := range resolved.Servers {
+		if srv.Type != config.ServerTypeStdio || len(srv.Env) == 0 {
+			continue
+		}
+		for key, value := range srv.Env {
+			for _, secret := range secrets {
+				if secret != "" && value == secret {
+					delete(srv.Env, key)
+					break
+				}
+			}
+		}
+		resolved.Servers[id] = srv
+	}
 }
 
 func (c *Controller) reject(status string) {
