@@ -43,7 +43,7 @@ func (o *HTTPOptions) Validate() error {
 	if o.Endpoint == "" {
 		return fmt.Errorf("%w: endpoint URL must not be empty", ErrInvalidOptions)
 	}
-	if _, err := netpolicy.ValidateHubEndpoint(o.Endpoint); err != nil {
+	if _, err := netpolicy.ValidateMCPHTTPURL(o.Endpoint); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalidOptions, err)
 	}
 	if err := ValidateHeaders(o.Headers); err != nil {
