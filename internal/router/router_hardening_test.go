@@ -18,7 +18,7 @@ func TestRouteToolRejectsUnsafeNameBeforeRecording(t *testing.T) {
 		"bad\x1b]0;title\x07",
 		"bad/name",
 	} {
-		_, err := r.RouteTool(context.Background(), &mcp.CallToolRequest{Params: &mcp.CallToolParams{Name: name}})
+		_, err := r.RouteTool(context.Background(), &mcp.CallToolRequest{Params: &mcp.CallToolParamsRaw{Name: name}})
 		if err == nil {
 			t.Fatalf("expected %q to be rejected", name)
 		}
