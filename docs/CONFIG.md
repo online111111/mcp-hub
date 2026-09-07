@@ -29,7 +29,11 @@ MCP Hub reads one strict JSON configuration file. The file is the source of trut
 
 A stdio server requires `command`. It may also specify `args`, `cwd`, and `env`; it must not specify `url` or `headers`.
 
-Relative `cwd` and command paths containing a path separator are resolved against the directory containing the configuration file. Arguments are passed without shell parsing or rewriting. The downstream process inherits the Hub environment with Hub authentication secrets filtered out, then receives the configured `env` overrides. Explicitly configuring a secret in downstream `env` intentionally passes it to that trusted process.
+Relative `cwd` and command paths containing a path separator are resolved against the directory containing the configuration file. Arguments are passed without shell parsing or rewriting.
+
+Stdio children do **not** inherit the Hub process environment wholesale. The implicit compatibility baseline is limited to runtime discovery and operating-system essentials: `PATH`, `HOME`, temporary-directory variables, locale/timezone variables, common CA trust-store paths, and the Windows system/profile variables needed by common Node/Python/npm-style runtimes. Ambient credentials, proxy variables, SSH agent sockets, cloud-provider variables, and arbitrary Hub process variables are excluded by default.
+
+Use the server `env` map for explicit opt-in. For example, `"GITHUB_TOKEN": "${GITHUB_TOKEN}"` deliberately forwards that variable to the trusted downstream process. Explicit values override the compatibility baseline. Hub MCP/Admin authentication-token values are additionally filtered from implicit inheritance as defense in depth.
 
 ## Streamable HTTP servers
 
