@@ -4,23 +4,25 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
 
-// ErrLockHeld indicates that another process holds the configuration lock file.
+// ErrLockHeld indicates that another process currently holds the configuration lock.
 type ErrLockHeld struct {
 	Path    string
 	Details string
 }
 
 func (e ErrLockHeld) Error() string {
-	if e.Details != "" {
-		return fmt.Sprintf("config lock file %q already exists (held by %s); manual intervention required", e.Path, e.Details)
+	if strings.TrimSpace(e.Details) != "" {
+		return fmt.Sprintf("configuration lock %q is held by %s", e.Path, strings.TrimSpace(e.Details))
 	}
-	return fmt.Sprintf("config lock file %q already exists; another write operation is in progress", e.Path)
+	return fmt.Sprintf("configuration lock %q is held; another write operation is in progress", e.Path)
 }
 
 // ErrDigestMismatch is returned when CAS (compare-and-swap) validation fails.
@@ -48,39 +50,68 @@ func ComputeFileDigest(path string) (string, error) {
 	return ComputeDigest(data), nil
 }
 
-// AcquireLock attempts to atomically acquire an exclusive lock file (<configPath>.lock).
-// It returns an unlock function on success, or ErrLockHeld if the lock already exists.
+// AcquireLock attempts to acquire an OS-backed exclusive advisory lock on
+// <configPath>.lock. The lock file is intentionally persistent: lock ownership is
+// represented by the kernel lock on the open file, not by path existence. This
+// avoids stale-lock failures after crashes and unlink/recreate races between
+// writers. The file contents are diagnostic only.
 func AcquireLock(configPath string) (func(), error) {
 	lockPath := configPath + ".lock"
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
-		if os.IsExist(err) {
-			details, _ := os.ReadFile(lockPath)
-			return nil, ErrLockHeld{Path: lockPath, Details: string(details)}
-		}
-		return nil, fmt.Errorf("failed to create lock file %q: %w", lockPath, err)
+		return nil, fmt.Errorf("failed to open configuration lock %q: %w", lockPath, err)
 	}
 
-	// Record PID and timestamp into lock file before publishing the lock.
-	info := fmt.Sprintf("pid=%d time=%s", os.Getpid(), time.Now().UTC().Format(time.RFC3339))
-	if _, writeErr := f.WriteString(info); writeErr != nil {
+	locked, err := tryLockFile(f)
+	if err != nil {
 		_ = f.Close()
-		_ = os.Remove(lockPath)
-		return nil, fmt.Errorf("failed to write lock file %q: %w", lockPath, writeErr)
+		return nil, fmt.Errorf("failed to acquire configuration lock %q: %w", lockPath, err)
 	}
-	if closeErr := f.Close(); closeErr != nil {
-		_ = os.Remove(lockPath)
-		return nil, fmt.Errorf("failed to close lock file %q: %w", lockPath, closeErr)
+	if !locked {
+		details := readLockDetails(f)
+		_ = f.Close()
+		return nil, ErrLockHeld{Path: lockPath, Details: details}
+	}
+
+	info := fmt.Sprintf("pid=%d time=%s", os.Getpid(), time.Now().UTC().Format(time.RFC3339))
+	if err := writeLockDetails(f, info); err != nil {
+		_ = unlockFile(f)
+		_ = f.Close()
+		return nil, fmt.Errorf("failed to write configuration lock metadata %q: %w", lockPath, err)
 	}
 
 	var unlockOnce sync.Once
 	unlock := func() {
 		unlockOnce.Do(func() {
-			_ = os.Remove(lockPath)
+			_ = unlockFile(f)
+			_ = f.Close()
 		})
 	}
-
 	return unlock, nil
+}
+
+func readLockDetails(f *os.File) string {
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return ""
+	}
+	data, err := io.ReadAll(io.LimitReader(f, 4096))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+func writeLockDetails(f *os.File, info string) error {
+	if err := f.Truncate(0); err != nil {
+		return err
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	if _, err := f.WriteString(info); err != nil {
+		return err
+	}
+	return f.Sync()
 }
 
 // WriteConfigFileAtomic writes data to path atomically using a temporary file in the same directory,
