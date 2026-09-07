@@ -46,29 +46,13 @@ func validateSchemaObject(schema any, schemaName string) error {
 	return nil
 }
 
-func validateJSONValue(value any, name string) error {
-	if value == nil {
-		return fmt.Errorf("%s cannot be nil", name)
-	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Errorf("%s cannot be marshaled to JSON: %w", name, err)
-	}
-	var decoded any
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		return fmt.Errorf("%s must be valid JSON: %w", name, err)
-	}
-	if decoded == nil {
-		return fmt.Errorf("%s must be non-null JSON", name)
-	}
-	return nil
-}
-
 // ValidateTool validates the schema and size bounds of an *mcp.Tool.
 // It checks:
 // 1. Tool is non-nil and Name is non-empty.
 // 2. InputSchema is a valid JSON object with top-level type == "object".
-// 3. OutputSchema (if present) is an encodable, non-null JSON Schema value.
+// 3. OutputSchema (if present) is also a JSON object with top-level type == "object".
+//    This deliberately matches the contract enforced by the pinned MCP Go SDK's
+//    Server.AddTool implementation, which panics for non-object output schemas.
 // 4. JSON-encoded size does not exceed MaxToolDefinitionBytes (256 KiB).
 func ValidateTool(tool *mcp.Tool) error {
 	if tool == nil {
@@ -78,20 +62,16 @@ func ValidateTool(tool *mcp.Tool) error {
 		return ErrEmptyToolName
 	}
 
-	// Validate InputSchema
 	if err := validateSchemaObject(tool.InputSchema, "input schema"); err != nil {
 		return fmt.Errorf("%w: %v", ErrInputSchemaInvalid, err)
 	}
 
-	// OutputSchema may describe any JSON value; unlike InputSchema, its top-level
-	// schema type is not restricted to object.
 	if tool.OutputSchema != nil {
-		if err := validateJSONValue(tool.OutputSchema, "output schema"); err != nil {
+		if err := validateSchemaObject(tool.OutputSchema, "output schema"); err != nil {
 			return fmt.Errorf("%w: %v", ErrOutputSchemaInvalid, err)
 		}
 	}
 
-	// Validate tool definition size
 	data, err := json.Marshal(tool)
 	if err != nil {
 		return fmt.Errorf("tool marshaling error: %w", err)

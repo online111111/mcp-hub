@@ -29,17 +29,14 @@ var (
 	}
 )
 
-// Validate checks the configuration for compliance with MCP Hub v0.2 specifications.
 func Validate(cfg *Config) error {
 	if cfg == nil {
 		return fmt.Errorf("config is nil")
 	}
-
 	if cfg.Version != CurrentVersion {
 		return fmt.Errorf("invalid version %d: version must be %d", cfg.Version, CurrentVersion)
 	}
 
-	// Validate Hub network and public-management policy.
 	listen := cfg.Hub.Listen
 	if listen == "" {
 		listen = DefaultListen
@@ -84,7 +81,6 @@ func Validate(cfg *Config) error {
 		}
 	}
 
-	// Validate Defaults
 	if cfg.Defaults.StartupTimeout != "" {
 		d, err := time.ParseDuration(cfg.Defaults.StartupTimeout)
 		if err != nil || d <= 0 || d > MaxDuration {
@@ -103,17 +99,14 @@ func Validate(cfg *Config) error {
 		}
 	}
 
-	// Validate MCPServers
 	if len(cfg.MCPServers) > MaxServers {
 		return fmt.Errorf("mcpServers count %d exceeds maximum limit of %d", len(cfg.MCPServers), MaxServers)
 	}
-
 	for id, s := range cfg.MCPServers {
 		if err := validateServer(id, s); err != nil {
 			return fmt.Errorf("server %q: %w", id, err)
 		}
 	}
-
 	return nil
 }
 
@@ -122,19 +115,16 @@ func validateListenAddress(listen string, publicMode bool) error {
 	if err != nil {
 		return fmt.Errorf("must be formatted as host:port (%w)", err)
 	}
-
 	port, err := strconv.Atoi(portStr)
 	if err != nil || port < 1 || port > 65535 {
 		return fmt.Errorf("port must be an integer between 1 and 65535, got %q", portStr)
 	}
-
 	if !isLoopbackHost(host) && !publicMode {
 		return fmt.Errorf("listen host %q is not loopback; enable hub.publicMode with authentication for public binding", host)
 	}
 	if publicMode && strings.TrimSpace(host) == "" {
 		return fmt.Errorf("public listen host must be explicit (for example 0.0.0.0 or ::)")
 	}
-
 	return nil
 }
 
@@ -144,10 +134,22 @@ func isLoopbackHost(host string) bool {
 		return true
 	}
 	ip := net.ParseIP(host)
-	if ip != nil && ip.IsLoopback() {
-		return true
+	return ip != nil && ip.IsLoopback()
+}
+
+func rejectCaseFoldedDuplicates(values map[string]string, field string) error {
+	seen := make(map[string]string, len(values))
+	for key := range values {
+		normalized := strings.ToLower(strings.TrimSpace(key))
+		if normalized == "" {
+			return fmt.Errorf("%s cannot contain an empty key", field)
+		}
+		if previous, ok := seen[normalized]; ok {
+			return fmt.Errorf("%s contains case-insensitive duplicate keys %q and %q", field, previous, key)
+		}
+		seen[normalized] = key
 	}
-	return false
+	return nil
 }
 
 func validateServer(id string, s ServerConfig) error {
@@ -166,6 +168,13 @@ func validateServer(id string, s ServerConfig) error {
 		if len(s.Headers) > 0 {
 			return fmt.Errorf("headers are forbidden for stdio server")
 		}
+		// Environment keys are case-insensitive on Windows. Rejecting case-folded
+		// duplicates on every platform keeps configs portable and avoids a random
+		// winner when the same config is later run on Windows.
+		if err := rejectCaseFoldedDuplicates(s.Env, "env"); err != nil {
+			return err
+		}
+
 	case ServerTypeStreamableHTTP:
 		if strings.TrimSpace(s.URL) == "" {
 			return fmt.Errorf("url is required for streamable_http server")
@@ -182,16 +191,19 @@ func validateServer(id string, s ServerConfig) error {
 		if len(s.Env) > 0 {
 			return fmt.Errorf("env is forbidden for streamable_http server")
 		}
-
 		if err := validateHTTPURL(s.URL); err != nil {
 			return err
 		}
-
+		if err := rejectCaseFoldedDuplicates(s.Headers, "headers"); err != nil {
+			return err
+		}
 		for h := range s.Headers {
-			if _, forbidden := forbiddenHeaders[strings.ToLower(h)]; forbidden {
+			normalized := strings.ToLower(strings.TrimSpace(h))
+			if _, forbidden := forbiddenHeaders[normalized]; forbidden {
 				return fmt.Errorf("forbidden transport header %q", h)
 			}
 		}
+
 	case "sse":
 		return fmt.Errorf("sse transport is not supported in P0")
 	case "":
@@ -200,7 +212,6 @@ func validateServer(id string, s ServerConfig) error {
 		return fmt.Errorf("unsupported type %q (must be 'stdio' or 'streamable_http')", s.Type)
 	}
 
-	// Validate server-level overrides
 	if s.StartupTimeout != "" {
 		d, err := time.ParseDuration(s.StartupTimeout)
 		if err != nil || d <= 0 || d > MaxDuration {
@@ -219,7 +230,6 @@ func validateServer(id string, s ServerConfig) error {
 		}
 	}
 
-	// Validate tools.disabled
 	seen := make(map[string]struct{})
 	for _, toolName := range s.Tools.Disabled {
 		if strings.TrimSpace(toolName) == "" {
@@ -230,7 +240,6 @@ func validateServer(id string, s ServerConfig) error {
 		}
 		seen[toolName] = struct{}{}
 	}
-
 	return nil
 }
 
@@ -239,7 +248,6 @@ func validateHTTPURL(rawURL string) error {
 	if err != nil {
 		return fmt.Errorf("invalid url: %w", err)
 	}
-
 	if u.Hostname() == "" || u.Opaque != "" {
 		return fmt.Errorf("url must contain a host")
 	}
@@ -249,18 +257,15 @@ func validateHTTPURL(rawURL string) error {
 	if u.Fragment != "" {
 		return fmt.Errorf("url fragment is forbidden")
 	}
-
 	scheme := strings.ToLower(u.Scheme)
 	if scheme != "https" && scheme != "http" {
 		return fmt.Errorf("unsupported url scheme %q: only https or loopback http are permitted", scheme)
 	}
-
 	if scheme == "http" {
 		hostname := u.Hostname()
 		if !isLoopbackHost(hostname) {
 			return fmt.Errorf("plain http url is only permitted for loopback addresses (%q is not loopback); use https for remote services", hostname)
 		}
 	}
-
 	return nil
 }

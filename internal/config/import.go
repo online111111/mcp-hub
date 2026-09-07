@@ -4,32 +4,33 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/url"
 	"os"
 	"sort"
 )
 
 // ImportOptions defines the options passed to the Import function.
 type ImportOptions struct {
-	RemoteType string // Optional override, e.g. "streamable_http"
-	DryRun     bool   // If true, do not write changes to target file
-	Yes        bool   // Explicit confirmation flag required to write
+	RemoteType string
+	DryRun     bool
+	Yes        bool
 }
 
-// ServerPreviewItem represents a sanitized preview of an imported server.
-// It explicitly omits and redacts credentials and secret values.
+// ServerPreviewItem is intentionally lossy: argument values and URL path/query
+// are omitted because either can contain credentials in third-party client configs.
 type ServerPreviewItem struct {
 	ID         string     `json:"id"`
 	Type       ServerType `json:"type"`
 	Command    string     `json:"command,omitempty"`
-	Args       []string   `json:"args,omitempty"`
+	ArgCount   int        `json:"argCount,omitempty"`
 	Cwd        string     `json:"cwd,omitempty"`
 	URL        string     `json:"url,omitempty"`
-	HeaderKeys []string   `json:"headerKeys,omitempty"` // Only names of headers, no values
-	EnvKeys    []string   `json:"envKeys,omitempty"`    // Only names of env vars, no values
+	HeaderKeys []string   `json:"headerKeys,omitempty"`
+	EnvKeys    []string   `json:"envKeys,omitempty"`
 	Enabled    bool       `json:"enabled"`
 }
 
-// ImportPreview represents the planned changes of an import operation.
 type ImportPreview struct {
 	TargetConfigPath string              `json:"targetConfigPath"`
 	ExistingCount    int                 `json:"existingCount"`
@@ -41,12 +42,12 @@ type importSourceContainer struct {
 	MCPServers map[string]ServerConfig `json:"mcpServers"`
 }
 
-// ParseImportSource strictly parses raw import JSON bytes.
+// ParseImportSource strictly parses exactly one JSON value and rejects unknown
+// fields, duplicate keys and trailing values.
 func ParseImportSource(data []byte, remoteType string) (map[string]ServerConfig, error) {
 	if len(data) > MaxConfigFileSize {
 		return nil, ErrConfigFileTooLarge
 	}
-
 	if err := CheckDuplicateKeys(data); err != nil {
 		return nil, fmt.Errorf("import source duplicate key check failed: %w", err)
 	}
@@ -54,9 +55,12 @@ func ParseImportSource(data []byte, remoteType string) (map[string]ServerConfig,
 	var container importSourceContainer
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
-
 	if err := dec.Decode(&container); err != nil {
 		return nil, fmt.Errorf("import source JSON decode error: %w", err)
+	}
+	var trailing any
+	if err := dec.Decode(&trailing); err != io.EOF {
+		return nil, fmt.Errorf("%w: extra content found after import root object", ErrTrailingJSON)
 	}
 
 	if len(container.MCPServers) == 0 {
@@ -66,8 +70,6 @@ func ParseImportSource(data []byte, remoteType string) (map[string]ServerConfig,
 	normalized := make(map[string]ServerConfig, len(container.MCPServers))
 	for id, s := range container.MCPServers {
 		normServer := s
-
-		// Normalize type based on 5.3 specifications
 		if normServer.Type == "" {
 			if normServer.Command != "" {
 				normServer.Type = ServerTypeStdio
@@ -89,11 +91,20 @@ func ParseImportSource(data []byte, remoteType string) (map[string]ServerConfig,
 		if err := validateServer(id, normServer); err != nil {
 			return nil, fmt.Errorf("invalid server %q: %w", id, err)
 		}
-
 		normalized[id] = normServer
 	}
-
 	return normalized, nil
+}
+
+func importPreviewURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "<redacted-url>"
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 // ImportServers imports servers from sourceData into targetConfigPath according to opts.
@@ -107,19 +118,14 @@ func ImportServers(sourceData []byte, targetConfigPath string, opts ImportOption
 		return nil, err
 	}
 
-	// Read or initialize target config
 	var targetCfg Config
 	var targetDigest string
-
 	existingData, err := os.ReadFile(targetConfigPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Initialize default target config
 			targetCfg = Config{
 				Version: CurrentVersion,
-				Hub: HubConfig{
-					Listen: DefaultListen,
-				},
+				Hub: HubConfig{Listen: DefaultListen},
 				Defaults: DefaultsConfig{
 					StartupTimeout: "20s",
 					CallTimeout:    "60s",
@@ -143,19 +149,16 @@ func ImportServers(sourceData []byte, targetConfigPath string, opts ImportOption
 		}
 	}
 
-	// Conflict detection and limit checks
 	for id := range newServers {
 		if _, exists := targetCfg.MCPServers[id]; exists {
 			return nil, fmt.Errorf("server ID %q already exists in target config (overwriting is rejected by default)", id)
 		}
 	}
-
 	totalServers := len(targetCfg.MCPServers) + len(newServers)
 	if totalServers > MaxServers {
 		return nil, fmt.Errorf("importing %d servers would result in %d servers, exceeding maximum limit of %d", len(newServers), totalServers, MaxServers)
 	}
 
-	// Prepare sanitized preview (credentials/secrets stripped)
 	var previewItems []ServerPreviewItem
 	for id, s := range newServers {
 		var headerKeys []string
@@ -163,7 +166,6 @@ func ImportServers(sourceData []byte, targetConfigPath string, opts ImportOption
 			headerKeys = append(headerKeys, h)
 		}
 		sort.Strings(headerKeys)
-
 		var envKeys []string
 		for e := range s.Env {
 			envKeys = append(envKeys, e)
@@ -174,17 +176,15 @@ func ImportServers(sourceData []byte, targetConfigPath string, opts ImportOption
 			ID:         id,
 			Type:       s.Type,
 			Command:    s.Command,
-			Args:       s.Args,
+			ArgCount:   len(s.Args),
 			Cwd:        s.Cwd,
-			URL:        s.URL,
+			URL:        importPreviewURL(s.URL),
 			HeaderKeys: headerKeys,
 			EnvKeys:    envKeys,
 			Enabled:    s.IsEnabled(),
 		})
 	}
-	sort.Slice(previewItems, func(i, j int) bool {
-		return previewItems[i].ID < previewItems[j].ID
-	})
+	sort.Slice(previewItems, func(i, j int) bool { return previewItems[i].ID < previewItems[j].ID })
 
 	preview := &ImportPreview{
 		TargetConfigPath: targetConfigPath,
@@ -192,31 +192,23 @@ func ImportServers(sourceData []byte, targetConfigPath string, opts ImportOption
 		NewCount:         len(newServers),
 		ServersToAdd:     previewItems,
 	}
-
 	if opts.DryRun {
 		return preview, nil
 	}
-
 	if !opts.Yes {
 		return preview, fmt.Errorf("confirmation required: specify --yes to apply import to %q", targetConfigPath)
 	}
 
-	// Merge servers
 	for id, s := range newServers {
 		targetCfg.MCPServers[id] = s
 	}
-
-	// Serialize merged configuration
 	outData, err := json.MarshalIndent(targetCfg, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal merged config: %w", err)
 	}
 	outData = append(outData, '\n')
-
-	// Write atomically with CAS
 	if err := WriteConfigFileAtomic(targetConfigPath, outData, targetDigest); err != nil {
 		return nil, fmt.Errorf("failed to write updated config: %w", err)
 	}
-
 	return preview, nil
 }

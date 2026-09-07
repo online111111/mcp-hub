@@ -1,34 +1,76 @@
 package cli
 
 import (
+	"errors"
+	"io"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"mcp-hub/internal/netpolicy"
 )
 
-const hubTokenEnv = "MCP_HUB_TOKEN"
+const (
+	hubTokenEnv        = "MCP_HUB_TOKEN"
+	maxHubResponseSize = int64(8 * 1024 * 1024)
+)
 
-// bearerTransport injects Hub authentication without mutating the caller's
-// request. It is shared by the status and doctor commands so public-Hub
-// diagnostics use the same credentials as the stdio bridge.
+var errHubResponseTooLarge = errors.New("Hub response exceeds 8 MiB limit")
+
+type boundedReadCloser struct {
+	r io.Reader
+	c io.Closer
+	n int64
+}
+
+func (b *boundedReadCloser) Read(p []byte) (int, error) {
+	if b.n <= 0 {
+		return 0, errHubResponseTooLarge
+	}
+	if int64(len(p)) > b.n {
+		p = p[:b.n]
+	}
+	n, err := b.r.Read(p)
+	b.n -= int64(n)
+	if err == io.EOF {
+		return n, err
+	}
+	if b.n == 0 && err == nil {
+		return n, errHubResponseTooLarge
+	}
+	return n, err
+}
+
+func (b *boundedReadCloser) Close() error { return b.c.Close() }
+
 type bearerTransport struct {
 	base  http.RoundTripper
 	token string
 }
 
 func (t bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if _, err := netpolicy.ValidateHubEndpoint(req.URL.String()); err != nil {
+		return nil, err
+	}
 	base := t.base
 	if base == nil {
 		base = http.DefaultTransport
 	}
-	if strings.TrimSpace(t.token) == "" {
-		return base.RoundTrip(req)
+	request := req
+	if strings.TrimSpace(t.token) != "" {
+		request = req.Clone(req.Context())
+		request.Header = req.Header.Clone()
+		request.Header.Set("Authorization", "Bearer "+t.token)
 	}
-	clone := req.Clone(req.Context())
-	clone.Header = req.Header.Clone()
-	clone.Header.Set("Authorization", "Bearer "+t.token)
-	return base.RoundTrip(clone)
+	resp, err := base.RoundTrip(request)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Body != nil {
+		resp.Body = &boundedReadCloser{r: resp.Body, c: resp.Body, n: maxHubResponseSize + 1}
+	}
+	return resp, nil
 }
 
 func hubToken(explicit string) string {
@@ -42,10 +84,6 @@ func newHubHTTPClient(token string, timeout time.Duration) *http.Client {
 	return &http.Client{
 		Transport: bearerTransport{token: token},
 		Timeout:   timeout,
-		// bearerTransport adds credentials on every request, including redirects.
-		// Never follow a response-selected URL, even on the same origin. Return
-		// the original response so diagnostics report its non-OK status and the
-		// caller remains responsible for closing its body.
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
