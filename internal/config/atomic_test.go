@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"mcp-hub/internal/config"
 )
@@ -200,5 +201,5 @@ func TestAcquireLockHelperProcess(t *testing.T) {
 	}
 	defer unlock()
 	fmt.Println("locked")
-	select {}
+	time.Sleep(24 * time.Hour)
 }
