@@ -57,10 +57,10 @@ func DialIO(ctx context.Context, opts IOOptions) (*Session, error) {
 		return nil, err
 	}
 
-	transport := &mcp.IOTransport{
+	transport := &legacyStdioTransport{base: &mcp.IOTransport{
 		Reader: opts.Reader,
 		Writer: opts.Writer,
-	}
+	}}
 
 	return dialTransport(ctx, transport, opts.StartupTimeout, opts.ClientInfo, opts.OnToolListChanged)
 }
@@ -243,7 +243,35 @@ func (s *Session) CallToolWithParams(ctx context.Context, params *mcp.CallToolPa
 	if s.IsClosed() {
 		return nil, ErrSessionClosed
 	}
-	return s.rawSession.CallTool(ctx, params)
+	if params == nil {
+		return s.rawSession.CallTool(ctx, nil)
+	}
+
+	// Protocol/client identity metadata is scoped to the incoming MCP hop. SDK
+	// v1.7 injects these keys for 2026-07-28 sessions, and forwarding them into
+	// another session can contradict that session's negotiated protocol.
+	forwarded := *params
+	forwarded.Meta = cloneForwardableMeta(params.Meta)
+	return s.rawSession.CallTool(ctx, &forwarded)
+}
+
+func cloneForwardableMeta(meta mcp.Meta) mcp.Meta {
+	if len(meta) == 0 {
+		return nil
+	}
+	out := make(mcp.Meta, len(meta))
+	for key, value := range meta {
+		switch key {
+		case mcp.MetaKeyProtocolVersion, mcp.MetaKeyClientInfo, mcp.MetaKeyClientCapabilities:
+			continue
+		default:
+			out[key] = value
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // ListTools retrieves a single page of tools using explicit ListToolsParams.

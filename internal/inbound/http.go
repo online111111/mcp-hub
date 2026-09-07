@@ -35,6 +35,12 @@ const (
 
 	// InitReadDeadline is the bounded timeout for reading the initial unauthenticated session POST body.
 	InitReadDeadline = 5 * time.Second
+
+	// latestStatefulProtocol is the newest MCP revision supported by this
+	// stateful Streamable HTTP endpoint. MCP 2026-07-28 requires stateless HTTP;
+	// rejecting the modern discovery probe makes v1.7+ clients negotiate down
+	// to the latest legacy revision without creating a throwaway stateful session.
+	latestStatefulProtocol = "2025-11-25"
 )
 
 // ServerStatusDTO represents the sanitized, non-secret diagnostic status of a managed downstream server.
@@ -273,7 +279,8 @@ func NewHTTPServer(listener net.Listener, publisher *Publisher, manager ManagerC
 			return publisher.Server()
 		},
 		&mcp.StreamableHTTPOptions{
-			SessionTimeout: sessionTimeout,
+			SessionTimeout:      sessionTimeout,
+			MaxRequestBodyBytes: maxBodySize,
 		},
 	)
 
@@ -421,6 +428,15 @@ func (s *HTTPServer) isAllowedHost(hostHeader string) bool {
 // and serializes capacity verification under initMu. Existing sessions and GET SSE
 // streams do not hold initMu.
 func (s *HTTPServer) handleMCP(w http.ResponseWriter, req *http.Request) {
+	// MCP 2026-07-28 is stateless over Streamable HTTP. This endpoint remains
+	// deliberately stateful so legacy clients keep session-scoped SSE/listChanged
+	// behavior. Reject the modern probe before the SDK allocates a temporary
+	// stateful session; v1.7+ clients then fall back to 2025-11-25 as designed.
+	if protocolVersion := strings.TrimSpace(req.Header.Get("Mcp-Protocol-Version")); protocolVersion > latestStatefulProtocol {
+		http.Error(w, "Bad Request: this stateful endpoint supports MCP through "+latestStatefulProtocol, http.StatusBadRequest)
+		return
+	}
+
 	sessionID := req.Header.Get("Mcp-Session-Id")
 	isInitPOST := (req.Method == http.MethodPost && sessionID == "")
 
