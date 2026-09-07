@@ -284,8 +284,9 @@ func NewHTTPServer(listener net.Listener, publisher *Publisher, manager ManagerC
 			return publisher.Server()
 		},
 		&mcp.StreamableHTTPOptions{
-			SessionTimeout:      sessionTimeout,
-			MaxRequestBodyBytes: maxBodySize,
+			SessionTimeout:             sessionTimeout,
+			MaxRequestBodyBytes:        maxBodySize,
+			DisableLocalhostProtection: true,
 		},
 	)
 

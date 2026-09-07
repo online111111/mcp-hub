@@ -410,6 +410,22 @@ func TestPublicModeRequiresHTTPSHostAndBearer(t *testing.T) {
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("expected public authenticated request, got %d", response.StatusCode)
 	}
+
+	mcpReq, _ := http.NewRequest(http.MethodPost, srv.URL()+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}`))
+	mcpReq.Host = "hub.example.com"
+	mcpReq.Header.Set("X-Forwarded-Proto", "https")
+	mcpReq.Header.Set("Authorization", "Bearer secret")
+	mcpReq.Header.Set("Content-Type", "application/json")
+	mcpReq.Header.Set("Accept", "application/json, text/event-stream")
+	mcpResp, err := http.DefaultClient.Do(mcpReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mcpResp.Body.Close()
+	if mcpResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(mcpResp.Body)
+		t.Fatalf("expected 200 OK from public /mcp, got %d: %s", mcpResp.StatusCode, string(body))
+	}
 }
 
 func TestMCP_InitializeAndListTools(t *testing.T) {
