@@ -76,6 +76,20 @@ Use `Authorization: Bearer <MCP_HUB_TOKEN>` when the Hub requires authentication
 
 When the target client is supported by the CLI, run `mcp-hub export --help`, then generate its config with `mcp-hub export` instead of hand-writing undocumented JSON.
 
+### Remote Admin client
+
+When the user wants to manage downstream services from a client machine, prefer the built-in remote Admin CLI instead of SSH-editing the server config. Set `MCP_HUB_ADMIN_TOKEN` and use the Hub's HTTPS base URL:
+
+```bash
+MCP_HUB_ADMIN_TOKEN='...' mcp-hub admin list --endpoint https://mcp.example.com
+MCP_HUB_ADMIN_TOKEN='...' mcp-hub admin get <id> --endpoint https://mcp.example.com
+MCP_HUB_ADMIN_TOKEN='...' mcp-hub admin add <id> --file ./server.json --endpoint https://mcp.example.com
+MCP_HUB_ADMIN_TOKEN='...' mcp-hub admin edit <id> --file ./server.json --endpoint https://mcp.example.com
+MCP_HUB_ADMIN_TOKEN='...' mcp-hub admin delete <id> --endpoint https://mcp.example.com --yes
+```
+
+The remote CLI deliberately reuses the Admin session, CSRF, ETag/CAS, validation, preflight, atomic write, rollback, and hot-reload path. Prefer the environment variable over `--token`; do not print the Admin token. Remote plaintext HTTP must not be used.
+
 ### stdio-only client
 
 Install the local `mcp-hub` binary and use the bridge:

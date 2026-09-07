@@ -57,6 +57,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runStatus(args[1:], stdout, stderr)
 	case "doctor":
 		return runDoctor(args[1:], stdout, stderr)
+	case "admin":
+		return runAdmin(args[1:], stdout, stderr)
 	case "stdio":
 		return runStdio(args[1:], stdout, stderr)
 	case "version", "--version":
@@ -83,6 +85,7 @@ Usage:
   mcp-hub export [--client <cursor|claude-desktop>] [--transport <stdio|http>] [--endpoint <url>] [--token-env]
   mcp-hub status [--endpoint <url>] [--token <bearer-token>] [--json]
   mcp-hub doctor [--endpoint <url>] [--token <bearer-token>]
+  mcp-hub admin <list|get|add|edit|delete> ...
   mcp-hub stdio --connect <url> [--token <bearer-token>]
 `)
 }

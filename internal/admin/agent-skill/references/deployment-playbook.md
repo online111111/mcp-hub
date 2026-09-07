@@ -146,14 +146,29 @@ MCP_HUB_TOKEN='...' mcp-hub stdio --connect https://host/mcp
 
 If the client name is known, inspect `mcp-hub export --help` and prefer generated config. Keep secrets outside checked-in client config where supported.
 
-## 7. Upgrade
+## 7. Remote downstream administration
+
+When a client machine has the MCP Hub binary and Admin credentials, manage the server-side `mcpServers` collection through the built-in remote Admin CLI rather than editing the server filesystem directly:
+
+```bash
+export MCP_HUB_ADMIN_TOKEN='<ADMIN_TOKEN>'
+mcp-hub admin list --endpoint https://host
+mcp-hub admin get <id> --endpoint https://host
+mcp-hub admin add <id> --file ./server.json --endpoint https://host
+mcp-hub admin edit <id> --file ./server.json --endpoint https://host
+mcp-hub admin delete <id> --endpoint https://host --yes
+```
+
+`server.json` is one `ServerConfig` object, not the whole Hub configuration. Retrieved secrets are redacted; editing an existing service may preserve those redacted secret placeholders through the server-side merge logic. Deletion is intentionally confirmation-gated. Use HTTPS for remote hosts.
+
+## 8. Upgrade
 
 - Never overwrite the only working binary without a backup.
 - Validate existing config with the new binary before restart.
 - Preserve environment files and tokens unless rotation was explicitly requested.
 - After restart, verify both local service health and the externally routed endpoint.
 
-## 8. Windows/macOS notes
+## 9. Windows/macOS notes
 
 - Release OS names are `windows` and `darwin`; architectures are `amd64` and `arm64`.
 - Windows release archives contain `mcp-hub.exe`; macOS/Linux contain `mcp-hub`.
