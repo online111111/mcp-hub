@@ -134,6 +134,10 @@ func (c *Coordinator) Start(parentCtx context.Context) {
 	go c.run()
 }
 
+// Stop closes admission immediately but intentionally keeps the coordinator
+// context alive while the current generation drains. Generation contexts are
+// derived from c.ctx, so cancelling c.ctx before drain would abort in-flight
+// calls instead of allowing them to finish within drainTimeout.
 func (c *Coordinator) Stop() {
 	c.publishMu.Lock()
 	c.mu.Lock()
@@ -147,9 +151,7 @@ func (c *Coordinator) Stop() {
 		c.operationCancel()
 		c.operationCancel = nil
 	}
-	if c.cancel != nil {
-		c.cancel()
-	}
+	cancel := c.cancel
 	gen := c.currentGen
 	c.currentGen = nil
 	c.state = StateClosed
@@ -159,6 +161,9 @@ func (c *Coordinator) Stop() {
 	if gen != nil {
 		gen.drain(c.drainTimeout)
 		_ = gen.Close()
+	}
+	if cancel != nil {
+		cancel()
 	}
 	close(c.stoppedCh)
 }
@@ -298,19 +303,19 @@ func (c *Coordinator) Status() ServiceStatus {
 		activeRevision = c.currentGen.revision
 	}
 	return ServiceStatus{
-		ID: c.serverID,
-		Enabled: c.desired.ResolvedConfig.Enabled,
-		State: c.state,
-		DesiredRevision: c.desired.Revision,
-		GenerationID: genID,
-		ActiveRevision: activeRevision,
-		ActiveLeases: active,
-		MaxConcurrency: c.desired.ResolvedConfig.MaxConcurrency,
-		LastError: c.lastError,
+		ID:                  c.serverID,
+		Enabled:             c.desired.ResolvedConfig.Enabled,
+		State:               c.state,
+		DesiredRevision:     c.desired.Revision,
+		GenerationID:        genID,
+		ActiveRevision:      activeRevision,
+		ActiveLeases:        active,
+		MaxConcurrency:      c.desired.ResolvedConfig.MaxConcurrency,
+		LastError:           c.lastError,
 		ConsecutiveFailures: c.consecutiveFail,
-		LastConnectedAt: c.lastConnected,
-		LastDisconnectAt: c.lastDisconnect,
-		PublishedTools: c.publishedCount,
+		LastConnectedAt:     c.lastConnected,
+		LastDisconnectAt:    c.lastDisconnect,
+		PublishedTools:      c.publishedCount,
 	}
 }
 
