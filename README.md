@@ -55,6 +55,24 @@ For a public Hub, set `MCP_HUB_TOKEN` or pass `--token` to `status`, `doctor`,
 and `stdio`. Prefer the environment variable on shared machines because command
 arguments may be visible in the process list.
 
+Remote downstream administration is available from any MCP Hub client binary that
+can reach the Admin endpoint. Use `MCP_HUB_ADMIN_TOKEN` (preferred) or `--token`:
+
+```bash
+export MCP_HUB_ADMIN_TOKEN='<ADMIN_TOKEN>'
+
+./mcp-hub admin list --endpoint https://hub.example.com
+./mcp-hub admin get remote-tools --endpoint https://hub.example.com
+./mcp-hub admin add filesystem --file ./filesystem.json --endpoint https://hub.example.com
+./mcp-hub admin edit filesystem --file ./filesystem.json --endpoint https://hub.example.com
+./mcp-hub admin delete filesystem --endpoint https://hub.example.com --yes
+```
+
+`admin add/edit/delete` reuse the same authenticated Admin API, ETag/CAS conflict
+checks, strict validation, preflight, atomic persistence, rollback, and hot reload
+path as the browser console. Remote plaintext HTTP is rejected; loopback HTTP is
+allowed for local development.
+
 ## Configuration
 
 Configuration is strict JSON. Duplicate keys, unknown fields, trailing values,
