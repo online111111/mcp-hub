@@ -1,5 +1,7 @@
 # MCP Hub
 
+**English** | [简体中文](README.zh-CN.md)
+
 MCP Hub is a single-binary gateway for running and aggregating multiple MCP
 servers. Configure downstream services once, then expose one Streamable HTTP
 endpoint to IDEs, agents, and stdio-only clients.
@@ -23,6 +25,10 @@ they are persisted.
 - A stdio bridge for clients that cannot connect to HTTP MCP endpoints.
 
 ## Quick start
+
+Building from source requires Go 1.25 or newer. The Hub binary itself does not
+require Node.js; downstream servers may require their own runtimes (for example,
+Node.js/npm for the `npx` example).
 
 Build the binary and copy the example configuration:
 
@@ -106,6 +112,13 @@ Enable `hub.admin` to serve the embedded management console at `/admin/`. Admin
 sessions use HttpOnly/SameSite cookies, synchronizer CSRF tokens, strict origin
 checks, bounded login/API rates, secret placeholders, and ETag/CAS writes.
 
+The console combines dark workspace navigation with a light working area, responsive
+service/metric cards, keyboard focus indicators and reduced-motion support. On narrow
+screens the call table preserves all columns in a locally scrollable region. Editor
+drafts retain their original revision, and configuration data and ETag are published
+together only after a complete successful refresh. Failed refresh/logout requests
+are reported explicitly. See [console polish and verification](docs/CONSOLE-POLISH.md).
+
 After signing in, the **Agent 自动部署** section exposes two authenticated deployment aids:
 
 - download a generated `skill.zip` containing the embedded `mcp-hub-deployer` Skill;
@@ -167,6 +180,8 @@ npx playwright install --with-deps chromium
 npm test
 ```
 
+`npm test` runs both interaction and design suites sequentially, including revision
+consistency, failure handling, accessibility and 320/390/768/1024/1440px layouts.
 These tests check browser interactions and outgoing payloads, not real-backend
 cookie issuance, CSRF enforcement, or disk/runtime persistence. Those boundaries
 need the Go API tests and the narrower integrated smoke test below. It runs a

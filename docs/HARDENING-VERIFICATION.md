@@ -1,5 +1,10 @@
 # v0.3.1 audit-hardening verification
 
+> Historical evidence for the v0.3.1 branch, not the current implementation.
+> For current SDK, environment inheritance, locking, preflight and platform coverage,
+> see [implementation status](IMPLEMENTATION-STATUS.md) and
+> [console polish verification](CONSOLE-POLISH.md).
+
 Base: `4a502b1` (`main`). Branch: `fix/v0.3.1-audit-hardening`. This is a focused hardening change, not a formal release.
 
 ## Current automated evidence

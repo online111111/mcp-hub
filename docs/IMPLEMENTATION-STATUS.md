@@ -40,6 +40,25 @@ The v0.4.0 candidate includes the earlier v0.3.1-v0.3.4 audit fixes and closes t
 - applies a bounded read deadline to existing-session MCP POST requests without affecting SSE GET streams;
 - expands CI to Linux, Windows, and macOS, adds compatibility/current Go coverage, race/SDK/browser checks, vulnerability scanning, pinned Actions, release packaging, Dependabot, and CODEOWNERS.
 
+## Admin console polish and reliability
+
+The console now uses dark workspace navigation and a light working area, with
+responsive layouts, accessible filter/dialog names, keyboard focus and reduced-motion
+support. Narrow screens retain every call-table column using local horizontal scrolling.
+
+Configuration uploads are decoded before entering the shared transaction lock;
+config reads, CAS validation, persistence and reload remain inside it. Browser editors
+pin the revision at open time, and complete refreshes publish configuration content
+and its ETag together so partial failures cannot authorize stale drafts. Refresh and
+logout failures are handled explicitly, including unconfirmed server-side logout.
+
+Evidence: 19 Chromium interaction/design regressions, four helper tests, the real-Hub
+Chromium smoke test, Go test/race/vet and the independent SDK probe. The console
+implementation commit passed all six OS/Go CI jobs and the vulnerability scan.
+See [console polish verification](CONSOLE-POLISH.md) for commands and boundaries.
+The project introduction is available in [English](../README.md) and
+[Simplified Chinese](../README.zh-CN.md).
+
 ## Verification commands
 
 Root module:
