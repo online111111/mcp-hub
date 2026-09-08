@@ -1,0 +1,40 @@
+name: Tag v0.4.3 Once
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/tag-v0.4.3-once.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tag-v0.4.3
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Create v0.4.3 tag at verified release commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_sha='5d875afb78780598ca80c18df48d2551a35f89ea'
+          git show "${release_sha}:internal/buildinfo/buildinfo.go" | grep -Fq 'Version   = "0.4.3"'
+          git fetch --tags --force
+          if git rev-parse -q --verify refs/tags/v0.4.3 >/dev/null; then
+            tag_sha="$(git rev-list -n1 v0.4.3)"
+            test "$tag_sha" = "$release_sha"
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag -a v0.4.3 "$release_sha" -m 'MCP Manager v0.4.3'
+          git push origin refs/tags/v0.4.3
