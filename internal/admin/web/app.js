@@ -39,7 +39,7 @@ async function api(path, options = {}, { withMeta = false } = {}) {
       credentials: "same-origin",
     });
   } catch {
-    throw new Error("无法连接到 MCP Hub，请检查服务状态");
+    throw new Error("无法连接到 MCP Manager，请检查服务状态");
   }
 
   if (response.status === 401) {
@@ -56,7 +56,7 @@ async function api(path, options = {}, { withMeta = false } = {}) {
   try {
     if (text) data = JSON.parse(text);
   } catch {
-    throw new Error("Hub 返回了无法解析的数据");
+    throw new Error("MCP Manager 返回了无法解析的数据");
   }
   return withMeta ? { data, etag: response.headers.get("ETag") || "" } : data;
 }
@@ -113,7 +113,6 @@ async function refreshAll({ announce = false } = {}) {
       api("/config", {}, { withMeta: true }),
       api("/status"),
     ]);
-    // Publish the config and its revision together only after both requests succeed.
     Object.assign(state, { config: config.data, etag: config.etag, status });
     render(status);
     setConnectionState(true);
@@ -143,37 +142,21 @@ function render(status) {
   const servers = status.servers || [];
   const calls = status.recentCalls || [];
   const ready = servers.filter((server) => server.state === "ready").length;
-  const failed = servers.filter((server) =>
-    ["unavailable", "backoff"].includes(server.state),
-  ).length;
-  const tools = servers.reduce(
-    (total, server) => total + (server.publishedToolCount || 0),
-    0,
-  );
-  const active = servers.reduce(
-    (total, server) => total + (server.activeCalls || 0),
-    0,
-  );
+  const failed = servers.filter((server) => ["unavailable", "backoff"].includes(server.state)).length;
+  const tools = servers.reduce((total, server) => total + (server.publishedToolCount || 0), 0);
+  const active = servers.reduce((total, server) => total + (server.activeCalls || 0), 0);
   const successes = calls.filter((call) => call.outcome === "success").length;
 
-  $("#health").textContent = status.restartRequired
-    ? "需重启"
-    : failed
-      ? "部分异常"
-      : "运行中";
+  $("#health").textContent = status.restartRequired ? "需重启" : failed ? "部分异常" : "运行中";
   $("#healthDetail").textContent = status.restartRequired
     ? "监听或认证/安全配置已变更，需要完整重启；旧凭据在重启前仍有效"
-    : failed
-      ? `${failed} 个服务正在重试`
-      : "Hub 正常接受请求";
+    : failed ? `${failed} 个服务正在重试` : "MCP Manager 正常接受请求";
   $("#serverCount").textContent = servers.length;
   $("#serverReadyCount").textContent = `${ready} 个可用`;
   $("#toolCount").textContent = tools;
   $("#activeCallCount").textContent = `${active} 个正在调用`;
   $("#callCount").textContent = calls.length;
-  $("#successRate").textContent = calls.length
-    ? `成功率 ${Math.round((successes / calls.length) * 100)}%`
-    : "暂无数据";
+  $("#successRate").textContent = calls.length ? `成功率 ${Math.round((successes / calls.length) * 100)}%` : "暂无数据";
   $("#hubVersion").textContent = status.version || "—";
   $("#hubUptime").textContent = formatUptime(status.uptimeSeconds);
   $("#lastReload").textContent = status.lastReloadStatus || "配置已加载";
@@ -183,82 +166,46 @@ function render(status) {
 
   const endpoint = `${location.origin}/mcp`;
   $("#mcpEndpoint").textContent = endpoint;
-  $("#stdioCommand").textContent =
-    `mcp-hub stdio --connect ${endpoint} --token <MCP_BEARER_TOKEN>`;
+  $("#stdioCommand").textContent = `mcp-manager stdio --connect ${endpoint} --token <MCP_BEARER_TOKEN>`;
 }
 
 function renderServers(statuses) {
   const statusByID = new Map(statuses.map((server) => [server.id, server]));
   const configured = state.config?.mcpServers || {};
-  const ids = [
-    ...new Set([...Object.keys(configured), ...statusByID.keys()]),
-  ].sort();
+  const ids = [...new Set([...Object.keys(configured), ...statusByID.keys()])].sort();
   $("#serverSummary").textContent = `${ids.length} 个服务`;
 
   if (!ids.length) {
-    $("#servers").innerHTML =
-      '<div class="empty-state"><strong>还没有下游 MCP 服务</strong><p>点击“添加服务”创建第一个连接。</p></div>';
+    $("#servers").innerHTML = '<div class="empty-state"><strong>还没有下游 MCP 服务</strong><p>点击“添加服务”创建第一个连接。</p></div>';
     return;
   }
 
-  $("#servers").innerHTML = ids
-    .map((id) => {
-      const raw = configured[id] || {};
-      const status = statusByID.get(id) || { id, state: "starting" };
-      const type = raw.type === "streamable_http" ? "Streamable HTTP" : "stdio";
-      const description =
-        raw.type === "streamable_http"
-          ? raw.url || "未配置 URL"
-          : [raw.command || "未配置命令", ...(raw.args || [])].join(" ");
-      const error = status.errorCategory
-        ? `<p class="server-error">${escapeHTML(status.errorCategory)}</p>`
-        : "";
-      return `
-        <article class="server-card">
-          <div class="server-main">
-            <div>
-              <div class="server-title-row">
-                <h3>${escapeHTML(id)}</h3>
-                <span class="badge ${escapeHTML(status.state)}">${escapeHTML(statusLabel(status.state))}</span>
-                <span class="badge">${escapeHTML(type)}</span>
-              </div>
-              <p class="server-desc">${escapeHTML(description)}</p>
-              ${error}
-              <div class="server-meta">
-                <span><b>${status.publishedToolCount || 0}</b> 个工具</span>
-                <span><b>${status.activeCalls || 0}</b> 个调用中</span>
-                <span>配置版本 <b>${status.activeRevision || "—"}</b></span>
-              </div>
-            </div>
-            <div class="server-actions">
-              <button class="button tiny secondary" data-action="edit" data-server-id="${escapeHTML(id)}" type="button">编辑</button>
-              <button class="button tiny secondary" data-action="duplicate" data-server-id="${escapeHTML(id)}" type="button">复制</button>
-              <button class="button tiny danger" data-action="delete" data-server-id="${escapeHTML(id)}" type="button">删除</button>
-            </div>
+  $("#servers").innerHTML = ids.map((id) => {
+    const raw = configured[id] || {};
+    const status = statusByID.get(id) || { id, state: "starting" };
+    const type = raw.type === "streamable_http" ? "Streamable HTTP" : "stdio";
+    const description = raw.type === "streamable_http"
+      ? raw.url || "未配置 URL"
+      : [raw.command || "未配置命令", ...(raw.args || [])].join(" ");
+    const error = status.errorCategory ? `<p class="server-error">${escapeHTML(status.errorCategory)}</p>` : "";
+    return `
+      <article class="server-card">
+        <div class="server-main">
+          <div>
+            <div class="server-title-row"><h3>${escapeHTML(id)}</h3><span class="badge ${escapeHTML(status.state)}">${escapeHTML(statusLabel(status.state))}</span><span class="badge">${escapeHTML(type)}</span></div>
+            <p class="server-desc">${escapeHTML(description)}</p>${error}
+            <div class="server-meta"><span><b>${status.publishedToolCount || 0}</b> 个工具</span><span><b>${status.activeCalls || 0}</b> 个调用中</span><span>配置版本 <b>${status.activeRevision || "—"}</b></span></div>
           </div>
-        </article>`;
-    })
-    .join("");
+          <div class="server-actions"><button class="button tiny secondary" data-action="edit" data-server-id="${escapeHTML(id)}" type="button">编辑</button><button class="button tiny secondary" data-action="duplicate" data-server-id="${escapeHTML(id)}" type="button">复制</button><button class="button tiny danger" data-action="delete" data-server-id="${escapeHTML(id)}" type="button">删除</button></div>
+        </div>
+      </article>`;
+  }).join("");
 }
 
 function renderCalls() {
-  const calls = filterCalls(
-    state.status?.recentCalls || [],
-    $("#callSearch").value,
-    $("#callOutcome").value,
-  );
-  $("#calls").innerHTML = calls
-    .map(
-      (call) => `
-        <tr>
-          <td class="call-tool">${escapeHTML(call.tool)}</td>
-          <td>${escapeHTML(call.serverId)}</td>
-          <td><span class="badge ${call.outcome === "success" ? "success" : "failed"}">${call.outcome === "success" ? "成功" : escapeHTML(call.outcome || "失败")}</span></td>
-          <td class="latency">${Number(call.durationMs) || 0} ms</td>
-          <td class="call-time">${escapeHTML(formatTimestamp(call.time))}</td>
-        </tr>`,
-    )
-    .join("");
+  const calls = filterCalls(state.status?.recentCalls || [], $("#callSearch").value, $("#callOutcome").value);
+  $("#calls").innerHTML = calls.map((call) => `
+    <tr><td class="call-tool">${escapeHTML(call.tool)}</td><td>${escapeHTML(call.serverId)}</td><td><span class="badge ${call.outcome === "success" ? "success" : "failed"}">${call.outcome === "success" ? "成功" : escapeHTML(call.outcome || "失败")}</span></td><td class="latency">${Number(call.durationMs) || 0} ms</td><td class="call-time">${escapeHTML(formatTimestamp(call.time))}</td></tr>`).join("");
   $("#callsEmpty").classList.toggle("hidden", calls.length > 0);
   $(".table-wrap").classList.toggle("hidden", calls.length === 0);
 }
@@ -266,13 +213,9 @@ function renderCalls() {
 function openEditor(id = null, source = null) {
   state.editingId = id;
   state.editorEtag = state.etag;
-  const server = normalizeServer(
-    source || (id && state.config?.mcpServers?.[id]) || {},
-  );
+  const server = normalizeServer(source || (id && state.config?.mcpServers?.[id]) || {});
   $("#editorTitle").textContent = id ? `编辑 ${id}` : "添加 MCP 服务";
-  $("#editorSubtitle").textContent = id
-    ? "修改后保存会立即热重载。"
-    : "填写常用字段即可，高级 JSON 可选。";
+  $("#editorSubtitle").textContent = id ? "修改后保存会立即热重载。" : "填写常用字段即可，高级 JSON 可选。";
   $("#serverId").value = id || "";
   $("#serverId").readOnly = Boolean(id);
   fillForm(server);
@@ -307,7 +250,6 @@ function addArgument(value = "") {
   input.rows = 2;
   input.setAttribute("aria-label", "参数值");
   input.value = value;
-  // Textareas normalize CRLF. Preserve the original bytes until this item is edited.
   input.argumentValue = value;
   input.addEventListener("input", () => { input.argumentValue = input.value; });
   const remove = document.createElement("button");
@@ -323,9 +265,7 @@ function addArgument(value = "") {
 function renderKeyValues(selector, entries) {
   const root = $(selector);
   root.replaceChildren();
-  for (const [key, value] of Object.entries(entries)) {
-    addKeyValue(root, key, value);
-  }
+  for (const [key, value] of Object.entries(entries)) addKeyValue(root, key, value);
   ensureKeyValueEmptyState(root);
 }
 
@@ -341,59 +281,47 @@ function addKeyValue(root, key = "", value = "") {
   $(".kv-empty", root)?.remove();
   const row = document.createElement("div");
   row.className = "kv-row";
-
   const keyInput = document.createElement("input");
   keyInput.className = "kv-key";
   keyInput.placeholder = "名称";
   keyInput.value = key;
-
   const secretWrap = document.createElement("div");
   secretWrap.className = "kv-secret-wrap";
   const valueInput = document.createElement("input");
   valueInput.className = "kv-value";
   const secret = value === SECRET_SENTINEL;
-  valueInput.placeholder = secret
-    ? (state.editingId ? "值（留空保留现有 Secret）" : "必须重新填写 Secret")
-    : "值";
+  valueInput.placeholder = secret ? (state.editingId ? "值（留空保留现有 Secret）" : "必须重新填写 Secret") : "值";
   valueInput.value = secret ? "" : value;
   valueInput.dataset.secret = secret ? "1" : "0";
   secretWrap.appendChild(valueInput);
-
   if (secret) {
     const label = document.createElement("span");
     label.className = "kv-secret-label";
     label.textContent = state.editingId ? "SECRET 已设置" : "SECRET 必须重新填写";
     secretWrap.appendChild(label);
   }
-
   const remove = document.createElement("button");
   remove.className = "remove-kv";
   remove.type = "button";
   remove.title = "删除";
   remove.setAttribute("aria-label", `删除 ${key || "这一项"}`);
   remove.textContent = "×";
-  remove.addEventListener("click", () => {
-    row.remove();
-    ensureKeyValueEmptyState(root);
-  });
+  remove.addEventListener("click", () => { row.remove(); ensureKeyValueEmptyState(root); });
   valueInput.addEventListener("input", () => {
     if (!valueInput.value) return;
     valueInput.dataset.secret = "0";
     $(".kv-secret-label", row)?.remove();
   });
-
   row.append(keyInput, secretWrap, remove);
   root.appendChild(row);
 }
 
 function collectKeyValueRows(selector) {
-  return collectKeyValues(
-    $$(".kv-row", $(selector)).map((row) => ({
-      key: $(".kv-key", row).value,
-      value: $(".kv-value", row).value,
-      preserveSecret: $(".kv-value", row).dataset.secret === "1",
-    })),
-  );
+  return collectKeyValues($$(".kv-row", $(selector)).map((row) => ({
+    key: $(".kv-key", row).value,
+    value: $(".kv-value", row).value,
+    preserveSecret: $(".kv-value", row).dataset.secret === "1",
+  })));
 }
 
 function collectForm() {
@@ -410,7 +338,6 @@ function collectForm() {
     const headers = collectKeyValueRows("#headerRows");
     if (Object.keys(headers).length) server.headers = headers;
   }
-
   const startupTimeout = $("#startupTimeout").value.trim();
   const callTimeout = $("#callTimeout").value.trim();
   const maxConcurrency = $("#maxConcurrency").value.trim();
@@ -436,34 +363,23 @@ function compactServer(serverInput) {
   }
   if (server.startupTimeout) compact.startupTimeout = server.startupTimeout;
   if (server.callTimeout) compact.callTimeout = server.callTimeout;
-  if (server.maxConcurrency)
-    compact.maxConcurrency = Number(server.maxConcurrency);
+  if (server.maxConcurrency) compact.maxConcurrency = Number(server.maxConcurrency);
   if (server.tools.disabled.length) compact.tools = server.tools;
   return compact;
 }
 
 function validateServer(id, server) {
-  if (!/^[a-z][a-z0-9_-]{0,31}$/.test(id)) {
-    throw new Error("服务 ID 格式不正确");
-  }
-  if (!server || typeof server !== "object" || Array.isArray(server)) {
-    throw new Error("服务配置必须是 JSON 对象");
-  }
+  if (!/^[a-z][a-z0-9_-]{0,31}$/.test(id)) throw new Error("服务 ID 格式不正确");
+  if (!server || typeof server !== "object" || Array.isArray(server)) throw new Error("服务配置必须是 JSON 对象");
   if (!state.editingId) {
     for (const field of ["env", "headers"]) {
       for (const [key, value] of Object.entries(server[field] || {})) {
-        if (value === SECRET_SENTINEL) {
-          throw new Error(`${field}.${key} 是脱敏 Secret，请重新填写或删除这一项`);
-        }
+        if (value === SECRET_SENTINEL) throw new Error(`${field}.${key} 是脱敏 Secret，请重新填写或删除这一项`);
       }
     }
   }
-  if (server.type === "stdio" && !String(server.command || "").trim()) {
-    throw new Error("stdio 服务必须填写启动命令");
-  }
-  if (server.type === "streamable_http" && !String(server.url || "").trim()) {
-    throw new Error("Streamable HTTP 服务必须填写 MCP URL");
-  }
+  if (server.type === "stdio" && !String(server.command || "").trim()) throw new Error("stdio 服务必须填写启动命令");
+  if (server.type === "streamable_http" && !String(server.url || "").trim()) throw new Error("Streamable HTTP 服务必须填写 MCP URL");
 }
 
 function syncTransport() {
@@ -474,19 +390,11 @@ function syncTransport() {
 
 function setEditorMode(mode) {
   if (mode === "json" && state.editorMode !== "json") {
-    try {
-      $("#serverJSON").value = JSON.stringify(collectForm(), null, 2);
-    } catch (error) {
-      $("#editorError").textContent = error.message;
-      return;
-    }
+    try { $("#serverJSON").value = JSON.stringify(collectForm(), null, 2); }
+    catch (error) { $("#editorError").textContent = error.message; return; }
   } else if (mode === "form" && state.editorMode === "json") {
-    try {
-      fillForm(JSON.parse($("#serverJSON").value));
-    } catch {
-      $("#editorError").textContent = "请先修正 JSON 格式";
-      return;
-    }
+    try { fillForm(JSON.parse($("#serverJSON").value)); }
+    catch { $("#editorError").textContent = "请先修正 JSON 格式"; return; }
   }
   state.editorMode = mode;
   $("#formEditor").classList.toggle("hidden", mode !== "form");
@@ -497,64 +405,41 @@ function setEditorMode(mode) {
 }
 
 async function deleteServer(id) {
-  if (!window.confirm(`确定删除 ${id}？\n该服务会立即从 Hub 中移除。`)) return;
+  if (!window.confirm(`确定删除 ${id}？\n该服务会立即从 MCP Manager 中移除。`)) return;
   try {
-    await api(`/servers/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-      headers: { "If-Match": state.etag },
-      body: "{}",
-    });
+    await api(`/servers/${encodeURIComponent(id)}`, { method: "DELETE", headers: { "If-Match": state.etag }, body: "{}" });
     toast("服务已删除");
     await refreshAll();
-  } catch (error) {
-    toast(error.message, "error");
-  }
+  } catch (error) { toast(error.message, "error"); }
 }
 
 $("#loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   $("#loginError").textContent = "";
   const button = $("#loginButton");
-  button.disabled = true;
-  button.textContent = "登录中…";
+  button.disabled = true; button.textContent = "登录中…";
   try {
-    const session = await api("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ token: $("#token").value }),
-    });
+    const session = await api("/auth/login", { method: "POST", body: JSON.stringify({ token: $("#token").value }) });
     state.csrf = session.csrfToken;
     $("#token").value = "";
     showApp();
     await refreshAll();
-  } catch (error) {
-    $("#loginError").textContent = error.message;
-  } finally {
-    button.disabled = false;
-    button.textContent = "进入管理台";
-  }
+  } catch (error) { $("#loginError").textContent = error.message; }
+  finally { button.disabled = false; button.textContent = "进入管理台"; }
 });
 
 $("#togglePassword").addEventListener("click", () => {
   const input = $("#token");
   input.type = input.type === "password" ? "text" : "password";
-  $("#togglePassword").textContent =
-    input.type === "password" ? "显示" : "隐藏";
+  $("#togglePassword").textContent = input.type === "password" ? "显示" : "隐藏";
 });
 
 $("#logout").addEventListener("click", async () => {
   $("#loginError").textContent = "";
-  try {
-    await api("/auth/logout", { method: "POST", body: "{}" });
-  } catch {
-    $("#loginError").textContent =
-      "退出请求未确认，服务器会话可能仍然有效。请恢复连接后重新登录并退出。";
-  } finally {
-    state.csrf = "";
-    state.etag = "";
-    state.editorEtag = "";
-    state.config = null;
-    state.status = null;
-    showLogin();
+  try { await api("/auth/logout", { method: "POST", body: "{}" }); }
+  catch { $("#loginError").textContent = "退出请求未确认，服务器会话可能仍然有效。请恢复连接后重新登录并退出。"; }
+  finally {
+    state.csrf = ""; state.etag = ""; state.editorEtag = ""; state.config = null; state.status = null; showLogin();
   }
 });
 
@@ -588,40 +473,20 @@ $("#serverForm").addEventListener("submit", async (event) => {
   $("#editorError").textContent = "";
   try {
     const id = $("#serverId").value.trim();
-    const server =
-      state.editorMode === "json"
-        ? JSON.parse($("#serverJSON").value)
-        : collectForm();
+    const server = state.editorMode === "json" ? JSON.parse($("#serverJSON").value) : collectForm();
     validateServer(id, server);
-    if (!state.editingId && state.config?.mcpServers?.[id]) {
-      throw new Error("这个服务 ID 已存在；请换一个 ID，或从服务列表进入编辑");
-    }
-    save.disabled = true;
-    save.textContent = "保存中…";
-    await api(`/servers/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      headers: { "If-Match": state.editorEtag },
-      body: JSON.stringify(server),
-    });
+    if (!state.editingId && state.config?.mcpServers?.[id]) throw new Error("这个服务 ID 已存在；请换一个 ID，或从服务列表进入编辑");
+    save.disabled = true; save.textContent = "保存中…";
+    await api(`/servers/${encodeURIComponent(id)}`, { method: "PUT", headers: { "If-Match": state.editorEtag }, body: JSON.stringify(server) });
     $("#editor").close();
     toast(state.editingId ? "服务已更新" : "服务已添加");
     await refreshAll();
-  } catch (error) {
-    $("#editorError").textContent = error.message;
-  } finally {
-    save.disabled = false;
-    save.textContent = "保存并热重载";
-  }
+  } catch (error) { $("#editorError").textContent = error.message; }
+  finally { save.disabled = false; save.textContent = "保存并热重载"; }
 });
 
-$("#refresh").addEventListener(
-  "click",
-  () => void refreshAll({ announce: true }).catch(() => {}),
-);
-$("#refreshTop").addEventListener(
-  "click",
-  () => void refreshAll({ announce: true }).catch(() => {}),
-);
+$("#refresh").addEventListener("click", () => void refreshAll({ announce: true }).catch(() => {}));
+$("#refreshTop").addEventListener("click", () => void refreshAll({ announce: true }).catch(() => {}));
 $("#callSearch").addEventListener("input", renderCalls);
 $("#callOutcome").addEventListener("change", renderCalls);
 
@@ -629,48 +494,29 @@ for (const button of $$(".nav-item")) {
   button.addEventListener("click", () => {
     for (const item of $$(".nav-item")) item.classList.remove("active");
     button.classList.add("active");
-    $(`#${button.dataset.section}`).scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "instant"
-        : "smooth",
-    });
+    $(`#${button.dataset.section}`).scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   });
 }
 
 for (const button of $$(".copy-button")) {
   button.addEventListener("click", async () => {
     const text = $(`#${button.dataset.copyTarget}`).textContent;
-    try {
-      await navigator.clipboard.writeText(text);
-      toast("已复制到剪贴板");
-    } catch {
-      toast("浏览器未允许复制，请手动复制", "error");
-    }
+    try { await navigator.clipboard.writeText(text); toast("已复制到剪贴板"); }
+    catch { toast("浏览器未允许复制，请手动复制", "error"); }
   });
 }
 
 $("#copyAgentPrompt").addEventListener("click", async () => {
   try {
-    const response = await fetch("/api/admin/v1/agent-prompt", {
-      credentials: "same-origin",
-    });
-    if (response.status === 401) {
-      showLogin();
-      throw new Error("登录已失效，请重新登录");
-    }
+    const response = await fetch("/api/admin/v1/agent-prompt", { credentials: "same-origin" });
+    if (response.status === 401) { showLogin(); throw new Error("登录已失效，请重新登录"); }
     if (!response.ok) throw new Error("部署 Prompt 暂时不可用");
     await navigator.clipboard.writeText(await response.text());
     toast("Agent 部署 Prompt 已复制");
-  } catch (error) {
-    toast(error.message || "浏览器未允许复制，请手动下载 Skill", "error");
-  }
+  } catch (error) { toast(error.message || "浏览器未允许复制，请手动下载 Skill", "error"); }
 });
 
-window.setInterval(() => {
-  if (!document.hidden && !$("#editor").open) void refreshStatus();
-}, 10_000);
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) void refreshStatus();
-});
+window.setInterval(() => { if (!document.hidden && !$("#editor").open) void refreshStatus(); }, 10_000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) void refreshStatus(); });
 
 void boot();
