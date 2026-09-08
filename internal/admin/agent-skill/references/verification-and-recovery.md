@@ -1,83 +1,40 @@
-# Verification and recovery
+# MCP Manager verification and recovery
 
-A deployment is complete only after the relevant gates pass.
+## Verification gates
 
-## Binary
+After install, migration, config edit, or upgrade:
 
-- executable exists at the reported path
-- version/help executes successfully
-- installed binary came from a verified release checksum or a locally tested source build
+1. `mcp-manager version`
+2. `mcp-manager validate --config <path>`
+3. service/process is active and listening only where intended
+4. `mcp-manager status --endpoint <base-url>`
+5. `mcp-manager doctor --endpoint <base-url>`
+6. `/healthz` and `/readyz` return the expected status
+7. if Admin is enabled, `/admin/` is reachable only through the intended origin and authentication succeeds
+8. for public deployments, HTTPS is active and port 8080 is not publicly exposed
+9. verify at least one representative client path when the client is available
 
-## Configuration
+Do not treat a green local browser smoke test as proof of every reverse proxy, GUI client, or third-party MCP server combination.
 
-```bash
-mcp-hub validate --config <config>
-```
+## Rename-specific verification
 
-Validation must succeed before start/restart.
+For MCP Hub -> MCP Manager migration, additionally verify:
 
-## Service
+- the service now launches `mcp-manager` when the service file was renamed;
+- existing `${MCP_HUB_TOKEN}` / `${MCP_HUB_ADMIN_TOKEN}` configurations still authenticate during the compatibility window;
+- newly generated client config uses `MCP_MANAGER_TOKEN` and the `mcp-manager` command;
+- `/mcp`, `/admin/`, and the existing config schema remain unchanged;
+- no old binary is deleted until the new binary passes health and client checks.
 
-For systemd:
+## Recovery
 
-```bash
-systemctl is-enabled mcp-hub
-systemctl is-active mcp-hub
-systemctl --no-pager --full status mcp-hub
-journalctl -u mcp-hub -n 100 --no-pager
-```
+If a previously healthy deployment fails after a change:
 
-Do not dump environment variables or tokens into the report.
+1. capture the failing service status and logs without exposing secrets;
+2. stop the new process if necessary;
+3. restore the previous binary and, if changed, previous config/service unit;
+4. restart the previous version;
+5. rerun health/status/doctor checks;
+6. preserve failure evidence for diagnosis.
 
-## Hub health
-
-Local/private:
-
-```bash
-mcp-hub status --endpoint http://127.0.0.1:8080
-mcp-hub doctor --endpoint http://127.0.0.1:8080
-```
-
-Authenticated public:
-
-```bash
-MCP_HUB_TOKEN='...' mcp-hub status --endpoint https://mcp.example.com
-MCP_HUB_TOKEN='...' mcp-hub doctor --endpoint https://mcp.example.com
-```
-
-The MCP endpoint is `/mcp`; the Admin page, when enabled, is `/admin/`.
-
-## Network/public checks
-
-- Hub listens only on expected local/private address.
-- Reverse proxy serves the expected hostname over HTTPS.
-- Port 8080 is not publicly exposed.
-- TLS certificate is valid for the hostname.
-- Reverse proxy forwards the original Host and HTTPS scheme correctly.
-
-## Downstream checks
-
-- Confirm each required downstream reaches healthy/ready state.
-- A broken optional downstream should be reported by name without exposing its credentials.
-- For stdio processes, inspect command availability as the Hub service user, not only as root/admin.
-- For environment-backed secrets, verify presence by variable name only; never print values.
-
-## Client checks
-
-- Verify `status`/`doctor` from the client machine before editing the client config.
-- For stdio bridge, start the command in a controlled test and confirm it stays connected without emitting secret-bearing diagnostics.
-- If available, use `mcp-hub export` to generate the exact client entry.
-
-## Rollback
-
-If an upgrade/change breaks a previously healthy deployment:
-
-1. Save logs and the failing config/binary version information.
-2. Stop the failing service.
-3. Restore the last known-good binary and config backup.
-4. Restore service/reverse-proxy file only if that file changed.
-5. Reload the service manager/proxy as needed.
-6. Start and run the full health gates again.
-7. Report the failed change and the restored version.
-
-Never delete the failed artifacts/logs before the cause is understood unless they contain exposed credentials; rotate any credential that was actually leaked.
+Do not delete configuration, environment files, backups, or downstream data as part of automatic recovery.

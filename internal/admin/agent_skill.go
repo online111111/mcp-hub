@@ -43,7 +43,7 @@ func (h *Handler) getAgentSkill(w http.ResponseWriter) {
 		if readErr != nil {
 			return readErr
 		}
-		writer, createErr := zw.Create(path.Join("mcp-hub-deployer", name))
+		writer, createErr := zw.Create(path.Join("mcp-manager-deployer", name))
 		if createErr != nil {
 			return createErr
 		}

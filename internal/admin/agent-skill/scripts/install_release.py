@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install a verified MCP Hub GitHub release for the current OS/architecture."""
+"""Install a checksum-verified MCP Manager GitHub release."""
 
 from __future__ import annotations
 
@@ -18,8 +18,9 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-DEFAULT_REPO = "online111111/mcp-hub"
-USER_AGENT = "mcp-hub-deployer/1"
+DEFAULT_REPO = "online111111/mcp-manager"
+LEGACY_REPO = "online111111/mcp-hub"
+USER_AGENT = "mcp-manager-deployer/1"
 
 
 def normalize_os(value: str) -> str:
@@ -54,14 +55,32 @@ def download(url: str, dest: Path) -> None:
         shutil.copyfileobj(resp, out)
 
 
+def release_metadata(repo: str, version: str | None) -> tuple[str, dict]:
+    def fetch(candidate: str) -> dict:
+        base = f"https://api.github.com/repos/{candidate}/releases"
+        if version:
+            tag = version if version.startswith("v") else f"v{version}"
+            return api_json(f"{base}/tags/{tag}")
+        return api_json(f"{base}/latest")
+
+    try:
+        return repo, fetch(repo)
+    except urllib.error.HTTPError as exc:
+        # During the repository rename window, allow the default new slug to
+        # fall back to the historical repository. Explicit --repo never falls back.
+        if repo != DEFAULT_REPO or exc.code not in {404, 301, 302}:
+            raise
+        return LEGACY_REPO, fetch(LEGACY_REPO)
+
+
 def parse_checksum(text: str, asset_name: str) -> str:
     for raw in text.splitlines():
         parts = raw.strip().split()
         if len(parts) >= 2 and parts[-1].lstrip("*") == asset_name:
             digest = parts[0].lower()
-            if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
-                raise ValueError(f"invalid SHA256 entry for {asset_name}")
-            return digest
+            if len(digest) == 64 and all(c in "0123456789abcdef" for c in digest):
+                return digest
+            raise ValueError(f"invalid SHA256 entry for {asset_name}")
     raise ValueError(f"{asset_name} not found in SHA256SUMS")
 
 
@@ -74,8 +93,9 @@ def sha256(path: Path) -> str:
 
 
 def safe_extract_binary(archive: Path, workdir: Path, goos: str) -> Path:
-    binary_name = "mcp-hub.exe" if goos == "windows" else "mcp-hub"
+    binary_name = "mcp-manager.exe" if goos == "windows" else "mcp-manager"
     wanted = {binary_name, "README.md"}
+    workdir.mkdir(parents=True, exist_ok=True)
 
     if archive.suffix == ".zip":
         with zipfile.ZipFile(archive) as zf:
@@ -90,14 +110,15 @@ def safe_extract_binary(archive: Path, workdir: Path, goos: str) -> Path:
                 zf.extract(member, workdir)
     else:
         with tarfile.open(archive, "r:gz") as tf:
-            names = {m.name for m in tf.getmembers() if m.isfile()}
+            members = tf.getmembers()
+            names = {m.name for m in members if m.isfile()}
             if binary_name not in names:
                 raise ValueError(f"archive does not contain {binary_name}")
-            for member in tf.getmembers():
+            for member in members:
                 p = Path(member.name)
                 if p.is_absolute() or ".." in p.parts:
                     raise ValueError("unsafe path in release archive")
-            selected = [m for m in tf.getmembers() if m.isfile() and m.name in wanted]
+            selected = [m for m in members if m.isfile() and m.name in wanted]
             tf.extractall(workdir, members=selected, filter="data")
 
     binary = workdir / binary_name
@@ -111,55 +132,48 @@ def safe_extract_binary(archive: Path, workdir: Path, goos: str) -> Path:
 def default_install_dir(goos: str) -> Path:
     if goos == "windows":
         base = os.environ.get("LOCALAPPDATA")
-        return Path(base) / "Programs" / "mcp-hub" if base else Path.home() / "mcp-hub-bin"
+        return Path(base) / "Programs" / "mcp-manager" if base else Path.home() / "mcp-manager-bin"
     if hasattr(os, "geteuid") and os.geteuid() == 0:
         return Path("/usr/local/bin")
     return Path.home() / ".local" / "bin"
 
 
-def release_metadata(repo: str, version: str | None) -> dict:
-    api = f"https://api.github.com/repos/{repo}/releases"
-    if version:
-        tag = version if version.startswith("v") else f"v{version}"
-        return api_json(f"{api}/tags/{tag}")
-    return api_json(f"{api}/latest")
-
-
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Install a checksum-verified MCP Hub GitHub release.")
+    parser = argparse.ArgumentParser(description="Install a checksum-verified MCP Manager GitHub release.")
     parser.add_argument("--repo", default=DEFAULT_REPO, help="GitHub repository owner/name")
     parser.add_argument("--version", help="Release version, e.g. 0.4.0 or v0.4.0; default: latest stable")
     parser.add_argument("--install-dir", help="Destination directory for the binary")
     parser.add_argument("--force", action="store_true", help="Replace an existing destination binary")
-    parser.add_argument("--dry-run", action="store_true", help="Resolve version/asset but do not download or install")
+    parser.add_argument("--dry-run", action="store_true", help="Resolve version/asset but do not install")
     args = parser.parse_args()
 
     try:
         goos = normalize_os(platform.system())
         goarch = normalize_arch(platform.machine())
-        meta = release_metadata(args.repo, args.version)
+        resolved_repo, meta = release_metadata(args.repo, args.version)
         tag = meta.get("tag_name") or ""
         if not tag.startswith("v"):
             raise ValueError(f"unexpected release tag: {tag!r}")
         version = tag[1:]
         ext = ".zip" if goos == "windows" else ".tar.gz"
-        asset_name = f"mcp-hub-{version}-{goos}-{goarch}{ext}"
+        asset_name = f"mcp-manager-{version}-{goos}-{goarch}{ext}"
         assets = {a.get("name"): a.get("browser_download_url") for a in meta.get("assets", [])}
         asset_url = assets.get(asset_name)
         sums_url = assets.get("SHA256SUMS")
         if not asset_url or not sums_url:
-            raise ValueError(f"release {tag} is missing {asset_name} or SHA256SUMS")
+            raise ValueError(f"release {tag} in {resolved_repo} is missing {asset_name} or SHA256SUMS")
 
         install_dir = Path(args.install_dir).expanduser() if args.install_dir else default_install_dir(goos)
-        binary_name = "mcp-hub.exe" if goos == "windows" else "mcp-hub"
+        binary_name = "mcp-manager.exe" if goos == "windows" else "mcp-manager"
         dest = install_dir / binary_name
+        print(f"repository={resolved_repo}")
         print(f"release={tag}")
         print(f"asset={asset_name}")
         print(f"destination={dest}")
         if args.dry_run:
             return 0
 
-        with tempfile.TemporaryDirectory(prefix="mcp-hub-install-") as td:
+        with tempfile.TemporaryDirectory(prefix="mcp-manager-install-") as td:
             tmp = Path(td)
             archive = tmp / asset_name
             sums = tmp / "SHA256SUMS"
@@ -173,7 +187,7 @@ def main() -> int:
 
             install_dir.mkdir(parents=True, exist_ok=True)
             if dest.exists() and not args.force:
-                raise FileExistsError(f"destination exists: {dest}; use --force only after backing it up")
+                raise FileExistsError(f"destination exists: {dest}; back it up and use --force to replace")
             staged = dest.with_name(dest.name + ".new")
             shutil.copy2(binary, staged)
             if goos != "windows":

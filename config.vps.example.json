@@ -7,11 +7,11 @@
     "allowedHosts": ["mcp.example.com"],
     "trustedProxies": ["127.0.0.1/32", "::1/128"],
     "auth": {
-      "bearerToken": "${MCP_HUB_TOKEN}"
+      "bearerToken": "${MCP_MANAGER_TOKEN}"
     },
     "admin": {
       "enabled": true,
-      "token": "${MCP_HUB_ADMIN_TOKEN}",
+      "token": "${MCP_MANAGER_ADMIN_TOKEN}",
       "sessionTimeout": "30m"
     }
   },

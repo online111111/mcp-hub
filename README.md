@@ -1,45 +1,34 @@
-# MCP Hub
+# MCP Manager
 
 **English** | [简体中文](README.zh-CN.md)
 
-MCP Hub is a single-binary personal MCP gateway for running, aggregating, routing, and managing multiple downstream MCP servers. Configure downstream services once, then expose one Streamable HTTP endpoint to IDEs, agents, HTTP MCP clients, and stdio-only clients.
+**MCP Manager** is a lightweight self-hosted MCP gateway and management console. Configure downstream MCP services once, then expose one managed Streamable HTTP endpoint to IDEs, agents, and stdio-only clients.
 
-Current source identity: **v0.4.0 release candidate**. A formal `v0.4.0` Git tag / GitHub Release has not been published yet.
-
-Current technical baseline:
-
-- Go directive: 1.25.0
-- CI: Go 1.25.8 and 1.27.1 on Linux, Windows, and macOS
-- MCP Go SDK: v1.7.0 in both production and the independent SDK probe
-- production shape: one Go binary; no Node.js runtime dependency
-
-Using SDK v1.7.0 does **not** mean MCP Hub claims complete native support for every MCP 2026-07-28 feature. See [compatibility](docs/COMPATIBILITY.md) for the tested protocol boundary.
+> Rename note: MCP Manager is the new product name of **MCP Hub**. The v0.4.0 release candidate keeps the existing JSON schema and `/mcp`/`/admin` endpoints so current deployments can migrate without rewriting their configuration.
 
 ## What it provides
 
 - One `/mcp` endpoint with a dynamically updated tool catalog.
 - Managed stdio children and remote Streamable HTTP downstreams.
-- Stable public tool names and explicit, no-replay request routing.
-- Strict, size-bounded JSON configuration.
-- OS-backed config locking, ETag/CAS, durable atomic writes, rollback, and hot reload.
-- Preflight validation before persisting new or connection-changing downstreams.
-- POSIX process-group and Windows Job Object process-tree ownership.
-- A responsive `/admin/` browser console.
-- Remote Admin CLI: `list/get/add/edit/delete` downstream MCP services without SSH.
-- `status`, `doctor`, `export`, and stdio bridge client workflows.
-- Loopback-safe local mode and fail-closed authenticated public mode.
-- An embedded `mcp-hub-deployer` Skill and copy-paste Agent deployment prompt.
-- Cross-platform CI, race checks, SDK probe, Chromium regressions, real-Hub browser smoke, and `govulncheck`.
+- Responsive `/admin/` console for status, calls, downstream CRUD, client access, and Agent deployment assets.
+- Remote Admin CLI: `list`, `get`, `add`, `edit`, and `delete` downstream services without SSH-editing the server config.
+- Strict bounded JSON configuration, ETag/CAS conflict protection, atomic persistence, downstream preflight, rollback, and hot reload.
+- Stable public tool names and no automatic replay of potentially side-effecting calls.
+- Loopback-safe local mode plus an explicit authenticated HTTPS public mode.
+- stdio bridge for clients that cannot connect to HTTP MCP endpoints.
+- Embedded `mcp-manager-deployer` Skill and copy-paste Agent prompt for deployment, migration, upgrades, verification, and recovery.
+
+The production module uses `github.com/modelcontextprotocol/go-sdk v1.7.0`. That dependency version does **not** mean MCP Manager claims complete/native support for every MCP 2026-07-28 feature; see [compatibility](docs/COMPATIBILITY.md).
 
 ## Quick start
 
 Building from source requires Go 1.25 or newer.
 
 ```bash
-go build -trimpath -o mcp-hub ./cmd/mcp-hub
+go build -trimpath -o mcp-manager ./cmd/mcp-manager
 cp config.example.json config.json
-./mcp-hub validate --config ./config.json
-./mcp-hub serve --config ./config.json
+./mcp-manager validate --config ./config.json
+./mcp-manager serve --config ./config.json
 ```
 
 Default MCP endpoint:
@@ -48,52 +37,63 @@ Default MCP endpoint:
 http://127.0.0.1:8080/mcp
 ```
 
-Inspect a running Hub:
+Diagnostics:
 
 ```bash
-./mcp-hub status --endpoint http://127.0.0.1:8080
-./mcp-hub doctor --endpoint http://127.0.0.1:8080
+./mcp-manager status --endpoint http://127.0.0.1:8080
+./mcp-manager doctor --endpoint http://127.0.0.1:8080
 ```
 
-For a public Hub, set `MCP_HUB_TOKEN` or pass `--token`. Prefer environment/secret storage on shared systems because command-line arguments may appear in process listings.
+## Authentication environment variables
+
+New installations use:
+
+```bash
+MCP_MANAGER_TOKEN=...
+MCP_MANAGER_ADMIN_TOKEN=...
+```
+
+For the rename compatibility window, the CLI continues to accept the historical `MCP_HUB_TOKEN` and `MCP_HUB_ADMIN_TOKEN`. New generated examples and exports use the `MCP_MANAGER_*` names. Existing deployments do not need to rotate credentials merely to adopt the new product name.
 
 ## Client access
 
-HTTP-capable MCP clients should connect directly to:
+For native Streamable HTTP clients, connect to:
 
 ```text
 https://mcp.example.com/mcp
 ```
 
-Clients that only support stdio can use the built-in bridge:
+For stdio-only clients:
 
 ```bash
-MCP_HUB_TOKEN='...' mcp-hub stdio --connect https://mcp.example.com/mcp
+MCP_MANAGER_TOKEN='...' mcp-manager stdio --connect https://mcp.example.com/mcp
 ```
 
-When a supported client-specific config is needed, prefer the current `mcp-hub export` command instead of relying on an old hand-written example.
-
-## Remote downstream administration
-
-Use the Admin token, not the MCP token:
+Generate supported client configuration with:
 
 ```bash
-export MCP_HUB_ADMIN_TOKEN='<ADMIN_TOKEN>'
-
-./mcp-hub admin list --endpoint https://hub.example.com
-./mcp-hub admin get remote-tools --endpoint https://hub.example.com
-./mcp-hub admin add filesystem --file ./filesystem.json --endpoint https://hub.example.com
-./mcp-hub admin edit filesystem --file ./filesystem.json --endpoint https://hub.example.com
-./mcp-hub admin delete filesystem --endpoint https://hub.example.com --yes
+mcp-manager export --client cursor --transport stdio --endpoint https://mcp.example.com/mcp --token-env
 ```
 
-Remote Admin reuses the same authenticated Admin session, CSRF, ETag/CAS, strict validation, downstream preflight, atomic persistence, reload, and rollback path as the browser console. Non-loopback plaintext HTTP and redirects are rejected.
+## Remote Admin
 
-See [Remote Admin CLI](docs/REMOTE-ADMIN.md) for server JSON format, secret handling, conflict semantics, exit behavior, and troubleshooting.
+Use the Admin credential, not the MCP bearer token:
+
+```bash
+export MCP_MANAGER_ADMIN_TOKEN='<ADMIN_TOKEN>'
+
+mcp-manager admin list --endpoint https://mcp.example.com
+mcp-manager admin get remote-tools --endpoint https://mcp.example.com
+mcp-manager admin add filesystem --file ./filesystem.json --endpoint https://mcp.example.com
+mcp-manager admin edit filesystem --file ./filesystem.json --endpoint https://mcp.example.com
+mcp-manager admin delete filesystem --endpoint https://mcp.example.com --yes
+```
+
+Remote mutations use the same authenticated Admin management plane as the browser console, including CSRF, ETag/CAS, strict validation, downstream preflight, atomic persistence, rollback, and hot reload. See [Remote Admin CLI](docs/REMOTE-ADMIN.md).
 
 ## Configuration
 
-Configuration is strict JSON. Duplicate keys, unknown fields, wrong case, trailing values, invalid transport combinations, unsafe remote HTTP URLs, and unresolved required environment references are rejected.
+The configuration schema deliberately retains the `hub` object during the product rename:
 
 ```json
 {
@@ -114,62 +114,34 @@ Configuration is strict JSON. Duplicate keys, unknown fields, wrong case, traili
 }
 ```
 
-stdio children inherit a safe compatibility environment baseline rather than the entire Hub environment. Forward required secrets explicitly through server `env`, preferably using `${NAME}` references.
-
-See [configuration](docs/CONFIG.md).
-
-## Admin console
-
-Enable `hub.admin` to serve `/admin/`.
-
-The management plane uses:
-
-- bounded Admin sessions;
-- `HttpOnly` / `SameSite=Strict` cookies and `Secure` cookies under HTTPS;
-- exact same-origin checks;
-- synchronizer CSRF tokens;
-- login/API rate limits;
-- secret placeholders;
-- ETag/CAS conflict protection;
-- connection-changing downstream preflight;
-- shared config locking, atomic persistence, reload, and rollback.
-
-The browser editor snapshots the config revision when it opens, so a later background refresh cannot silently authorize a stale draft against a newer revision. Slow PUT bodies are read before entering the shared configuration transaction lock.
-
-See [console polish and verification](docs/CONSOLE-POLISH.md) and [security](docs/SECURITY.md).
+See [configuration](docs/CONFIG.md) for strict decoding, environment inheritance, reload semantics, limits, and Admin writes.
 
 ## Public deployment
 
 Recommended topology:
 
 ```text
-Internet -> Caddy/Nginx HTTPS -> 127.0.0.1:8080 MCP Hub
+Internet -> HTTPS Caddy/Nginx -> 127.0.0.1:8080 MCP Manager
 ```
 
-Public mode is fail-closed and requires an HTTPS `publicUrl`, explicit `allowedHosts`, trusted proxy CIDRs, and separate strong MCP/Admin tokens. Do not expose Hub port 8080 directly to the Internet.
+Public mode requires an HTTPS `publicUrl`, explicit `allowedHosts`, trusted proxy CIDRs, and distinct MCP/Admin credentials of at least 32 characters each. Never expose port 8080 directly to the Internet. See [VPS deployment](docs/VPS.md) and [security](docs/SECURITY.md).
 
-Use [VPS/public deployment](docs/VPS.md) and [`config.vps.example.json`](config.vps.example.json) as the baseline.
+## MCP Hub -> MCP Manager migration
 
-## Architecture
+The rename is designed to avoid a flag day:
 
-```mermaid
-flowchart TD
-    Client["HTTP or stdio client"] --> Inbound["Inbound / bridge"]
-    Inbound --> Publisher
-    Publisher --> Catalog
-    Catalog --> Router
-    Router --> Manager["Downstream manager"]
-    Runtime["Runtime controller"] --> Manager
-    Manager --> Servers["stdio / Streamable HTTP servers"]
-```
+1. Back up the existing binary, config, environment file, service unit, and proxy config.
+2. Install/stage the `mcp-manager` binary.
+3. Validate the existing config with `mcp-manager validate`; the schema and endpoints are unchanged.
+4. Existing `MCP_HUB_*` variables may remain during the compatibility window; use `MCP_MANAGER_*` for newly written deployments.
+5. Change the service command to `mcp-manager` only after validation.
+6. Run `status`, `doctor`, Admin login, and a representative client check before deleting the old binary.
 
-Configuration on disk remains the persistent source of truth. Browser Admin, Remote Admin CLI, and trusted Agent automation converge on the same server-side configuration transaction model rather than bypassing validation and CAS.
+The legacy `cmd/mcp-hub` source entrypoint is still built in CI during this transition. Official v0.4 release archives use the `mcp-manager` binary name.
 
-See [architecture](docs/ARCHITECTURE.md) and the current [development design](MCP-Hub-%E5%BC%80%E5%8F%91%E8%AE%BE%E8%AE%A1%E6%96%87%E6%A1%A3.md).
+The internal Go module path remains `mcp-hub` for the v0.4 rename to avoid a high-risk repository-wide import rewrite. It is an implementation detail, not the public binary/product identity. A module-path migration can be evaluated separately after the product rename is stable.
 
 ## Development and verification
-
-Root module:
 
 ```bash
 go test -count=1 -timeout 180s ./...
@@ -177,78 +149,33 @@ go test -race -count=1 -timeout 240s ./...
 go vet ./...
 node --check internal/admin/web/app.js
 node --test internal/admin/webtest/*.test.mjs
-go build -trimpath -o dist/mcp-hub ./cmd/mcp-hub
+go build -trimpath -o dist/mcp-manager ./cmd/mcp-manager
 ```
 
-Independent SDK probe:
+GitHub Actions covers Linux, Windows, and macOS on the compatibility/current Go matrix. Current-Go jobs run race tests and the independent SDK probe; Linux additionally runs Chromium regressions and a real-MCP-Manager browser smoke test. CI also runs `govulncheck`.
 
-```bash
-cd verification/sdkprobe
-go test -race -count=1 -timeout 120s ./...
-```
+## Release packaging
 
-Chromium UI regressions:
+A `v*` tag builds:
 
-```bash
-cd internal/admin/browsertest
-npm ci
-npx playwright install --with-deps chromium
-npm test
-```
+- Linux amd64/arm64 `.tar.gz`
+- Windows amd64/arm64 `.zip`
+- macOS amd64/arm64 `.tar.gz`
+- `SHA256SUMS`
 
-Real-Hub Chromium smoke from repository root:
+Assets use names such as `mcp-manager-0.4.0-linux-amd64.tar.gz`.
 
-```bash
-go build -trimpath -o dist/mcp-hub ./cmd/mcp-hub
-node internal/admin/browsertest/live-smoke.mjs
-```
-
-GitHub Actions runs Linux/Windows/macOS × Go 1.25.8/1.27.1 plus current-Go race/SDK checks, Linux browser/integration checks, and `govulncheck`.
-
-Automated PASS does not certify every GUI MCP client, third-party MCP server, or reverse-proxy/TLS combination. See [implementation status](docs/IMPLEMENTATION-STATUS.md).
-
-## Agent deployment assets
-
-After Admin login, **Agent 自动部署** provides:
-
-- a generated `skill.zip` containing the embedded `mcp-hub-deployer` Skill;
-- a generic deployment prompt for agents that do not support Skills.
-
-The Skill source lives under `internal/admin/agent-skill/` and is embedded into the binary so deployment guidance ships with the running version.
-
-Maintainers should also read [Agent maintenance guide](MCP-Hub-Agent%E5%AE%9E%E6%96%BD%E6%89%8B%E5%86%8C.md).
-
-## Release status
-
-The repository contains a release workflow that:
-
-1. verifies tag/source version agreement;
-2. runs test/vet/SDK probe;
-3. builds Linux, Windows, and macOS for amd64 and arm64;
-4. injects commit/build-date metadata;
-5. generates `SHA256SUMS`;
-6. publishes a GitHub Release.
-
-Until an exact `v0.4.0` tag and GitHub Release exist, the project should be described as **v0.4.0 release candidate**, not as a completed stable release.
-
-## Documentation index
+## Documentation
 
 - [Configuration](docs/CONFIG.md)
-- [Security model](docs/SECURITY.md)
-- [Compatibility](docs/COMPATIBILITY.md)
-- [VPS/public deployment](docs/VPS.md)
-- [Remote Admin CLI](docs/REMOTE-ADMIN.md)
 - [Architecture](docs/ARCHITECTURE.md)
-- [Implementation / verification status](docs/IMPLEMENTATION-STATUS.md)
-- [Admin console verification](docs/CONSOLE-POLISH.md)
-- [SDK probe](verification/sdkprobe/README.md)
-- [Current development design](MCP-Hub-%E5%BC%80%E5%8F%91%E8%AE%BE%E8%AE%A1%E6%96%87%E6%A1%A3.md)
-- [Agent maintenance guide](MCP-Hub-Agent%E5%AE%9E%E6%96%BD%E6%89%8B%E5%86%8C.md)
-
-`docs/HARDENING-VERIFICATION.md` is historical v0.3.1 evidence; its older measurements are not the current product contract.
+- [Security](docs/SECURITY.md)
+- [Compatibility](docs/COMPATIBILITY.md)
+- [Remote Admin](docs/REMOTE-ADMIN.md)
+- [VPS deployment](docs/VPS.md)
+- [Implementation status](docs/IMPLEMENTATION-STATUS.md)
+- [Console verification](docs/CONSOLE-POLISH.md)
 
 ## Security boundary
 
-MCP Hub is a trusted personal gateway, not a sandbox. stdio downstreams execute with the Hub user's privileges. Run the service as a dedicated non-root user, keep credentials outside Git, and only configure MCP servers you trust.
-
-See [security](docs/SECURITY.md) for the complete boundary.
+MCP Manager is a trusted personal gateway, **not a sandbox**. stdio downstreams execute with the Manager service user's privileges. Run it as a dedicated non-root account and configure only MCP services you trust.

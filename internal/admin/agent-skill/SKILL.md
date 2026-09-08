@@ -1,163 +1,125 @@
 ---
-name: mcp-hub-deployer
-description: Deploy, configure, upgrade, repair, verify, or remove online111111/mcp-hub for either server-side Hub hosting or client-side access. Use when an agent must install MCP Hub on Linux, macOS, or Windows; deploy it to a VPS; expose it safely through HTTPS; configure local or remote downstream MCP servers; connect HTTP-capable clients; create a stdio bridge for stdio-only clients; migrate or upgrade an existing installation; diagnose a broken deployment; or produce exact deployment commands when direct shell/SSH access is unavailable.
+name: mcp-manager-deployer
+description: Deploy, configure, upgrade, repair, verify, or remove MCP Manager for server-side hosting or client-side access. Use when an agent needs to install online111111/mcp-manager (or migrate an existing online111111/mcp-hub installation), deploy it to Linux/macOS/Windows or a VPS, expose it safely through HTTPS, configure downstream MCP services, connect HTTP or stdio-only clients, use Remote Admin, upgrade an existing installation, or recover a broken deployment.
 ---
 
-# MCP Hub Deployer
+# MCP Manager Deployer
 
-Deploy `https://github.com/online111111/mcp-hub` as a repeatable, verified operation. Prefer a working, supportable deployment over the shortest command sequence.
+Deploy and maintain MCP Manager as a repeatable, verified operation. Treat existing installations as state that must be preserved unless the user explicitly requests replacement or deletion.
 
 ## Operating rules
 
-- Treat the target machine and current installation as the source of truth. Inspect before changing.
-- Prefer the latest stable GitHub Release. Pin a version when reproducibility matters. Build from source only when no suitable release exists or the user requests it.
-- Use `scripts/install_release.py` when Python 3 is available; it selects the correct OS/architecture archive and verifies `SHA256SUMS` before installing.
-- Never expose Hub port `8080` directly to the public Internet. For public hosting, keep Hub on loopback and terminate TLS in Caddy/Nginx/another trusted reverse proxy.
-- Never print or repeat secret token values in the final report. Prefer environment variables or a mode-0600 environment file over command-line `--token` arguments.
-- Public MCP and Admin tokens must be distinct and at least 32 characters after expansion.
-- Run a server deployment as a dedicated non-root account unless the user explicitly requires another model.
-- Back up an existing binary, config, service unit, and reverse-proxy snippet before modifying them.
-- Validate configuration before starting/restarting. After a change, verify process state and application health. Roll back if a previously working deployment becomes unhealthy.
-- Do not delete configuration, credentials, or user data during uninstall/cleanup without explicit user approval.
-- Do not invent a client configuration format. Prefer `mcp-hub export` or inspect that client's current MCP documentation/config if export does not support it.
-- Keep status updates concise. Finish with endpoints, service state, installed version, config locations, and any remaining manual step; never expose secrets.
+- Inspect OS, architecture, privilege level, current binary/config/service, ports, and reverse proxy before changing anything.
+- Prefer a stable GitHub Release and verify `SHA256SUMS`. Build from source only when needed.
+- Use `scripts/install_release.py` when Python 3 is available.
+- Never expose port `8080` directly to the public Internet. Prefer loopback MCP Manager plus a trusted HTTPS reverse proxy.
+- Use separate MCP and Admin tokens of at least 32 characters. Never print token values in the final report.
+- New deployments use `MCP_MANAGER_TOKEN` and `MCP_MANAGER_ADMIN_TOKEN`. Existing `MCP_HUB_TOKEN` and `MCP_HUB_ADMIN_TOKEN` installations are legacy-compatible during the rename migration; do not rotate them merely to rename the product.
+- Run persistent server deployments as a dedicated non-root account unless the user requires another model.
+- Back up an existing binary, config, environment file, service unit, and reverse-proxy snippet before mutation.
+- Run `mcp-manager validate` before restart; run `status` and `doctor` after changes. Roll back if a previously healthy deployment becomes unhealthy.
+- Preserve existing downstream `mcpServers` unless the user asks to add, edit, or remove entries.
+- Prefer `mcp-manager admin` over SSH-editing a remote config when Remote Admin is available.
+- Do not claim full MCP 2026-07-28 compatibility merely because the project uses Go SDK v1.7.0.
 
-## Decision workflow
+## Choose the workflow
 
-1. Determine the requested mode:
-   - **Server / VPS**: host one Hub that aggregates downstream MCP servers.
-   - **Local all-in-one**: run the Hub on the same machine as the client.
-   - **HTTP client**: connect a client that natively supports Streamable HTTP to an existing Hub.
-   - **stdio client / bridge**: install the binary locally and bridge stdio to an existing HTTP Hub.
-   - **Upgrade / repair / uninstall**: preserve the existing deployment until the replacement is verified.
-2. Determine execution capability:
-   - If shell/SSH/remote execution is available, perform the deployment directly.
-   - If not, produce exact commands and files for the user's target OS; do not claim they were executed.
-3. Inspect OS, architecture, privilege level, service manager, existing `mcp-hub`, current config, listening ports, and reverse proxy before mutation.
-4. Read `references/deployment-playbook.md` for the selected workflow.
-5. Read `references/config-recipes.md` when creating or editing configuration.
-6. Apply `references/verification-and-recovery.md` before declaring success.
+1. **Server/VPS**: install one persistent MCP Manager and aggregate downstream services.
+2. **Local all-in-one**: run MCP Manager on the same machine as the client.
+3. **HTTP client**: connect directly to `https://<host>/mcp`.
+4. **stdio-only client**: install the local binary and bridge to the remote `/mcp` endpoint.
+5. **Remote Admin client**: manage downstream services through the authenticated Admin plane.
+6. **Upgrade/repair**: preserve the working deployment until the replacement passes verification.
 
-## Server deployment
+Read `references/deployment-playbook.md` for execution order, `references/config-recipes.md` for configuration, and `references/verification-and-recovery.md` before declaring success.
+
+## Server deployment baseline
 
 Use this order:
 
-1. Install or upgrade the binary with checksum verification.
-2. Create a dedicated service user and directories when running persistently on Linux.
-3. Generate or preserve secrets. Never rotate existing secrets implicitly during an unrelated upgrade.
-4. Create a minimal config first. Add downstream MCP servers only from explicit user requirements or existing config.
-5. Run `mcp-hub validate --config <path>`.
-6. Install/update the service unit and start the Hub.
-7. If public access is required, configure HTTPS reverse proxy only after loopback Hub health passes.
-8. Run `status`, `doctor`, and endpoint checks.
-9. Report a concise deployment inventory.
+1. Install/upgrade `mcp-manager` with checksum verification.
+2. Create/preserve a dedicated service account and persistent directories.
+3. Generate or preserve credentials.
+4. Create or preserve `config.json`.
+5. Run `mcp-manager validate --config <path>`.
+6. Start/restart the service.
+7. Verify loopback health before configuring public HTTPS.
+8. Run `mcp-manager status` and `mcp-manager doctor`.
+9. Report endpoints, version, paths, service state, verification, and rollback location without secrets.
 
-For public VPS deployments, use the repository's security model:
+For public VPS deployments prefer:
 
 - `hub.listen`: `127.0.0.1:8080`
 - `hub.publicMode`: `true`
 - `hub.publicUrl`: `https://<domain>`
-- `allowedHosts`: only expected hostnames
-- `trustedProxies`: only the actual local/private proxy addresses, never broad public CIDRs
-- separate `${MCP_HUB_TOKEN}` and `${MCP_HUB_ADMIN_TOKEN}`
+- narrow `allowedHosts`
+- only actual proxy addresses in `trustedProxies`
+- `${MCP_MANAGER_TOKEN}` and `${MCP_MANAGER_ADMIN_TOKEN}`
 - only ports 80/443 exposed publicly
 
-Do not enable public mode without a hostname/TLS plan. If the user has no domain, deploy loopback/private mode and state what is still needed for safe public access.
+## Client access
 
-## Client deployment
+### Streamable HTTP
 
-### HTTP-capable client
+Use the MCP endpoint:
 
-Prefer native Streamable HTTP. The endpoint is normally:
-
-`https://<hub-host>/mcp`
-
-Use `Authorization: Bearer <MCP_HUB_TOKEN>` when the Hub requires authentication. Put the token in the client's secret/environment facility when available.
-
-When the target client is supported by the CLI, run `mcp-hub export --help`, then generate its config with `mcp-hub export` instead of hand-writing undocumented JSON.
-
-### Remote Admin client
-
-When the user wants to manage downstream services from a client machine, prefer the built-in remote Admin CLI instead of SSH-editing the server config. Set `MCP_HUB_ADMIN_TOKEN` and use the Hub's HTTPS base URL:
-
-```bash
-MCP_HUB_ADMIN_TOKEN='...' mcp-hub admin list --endpoint https://mcp.example.com
-MCP_HUB_ADMIN_TOKEN='...' mcp-hub admin get <id> --endpoint https://mcp.example.com
-MCP_HUB_ADMIN_TOKEN='...' mcp-hub admin add <id> --file ./server.json --endpoint https://mcp.example.com
-MCP_HUB_ADMIN_TOKEN='...' mcp-hub admin edit <id> --file ./server.json --endpoint https://mcp.example.com
-MCP_HUB_ADMIN_TOKEN='...' mcp-hub admin delete <id> --endpoint https://mcp.example.com --yes
+```text
+https://<host>/mcp
 ```
 
-The remote CLI deliberately reuses the Admin session, CSRF, ETag/CAS, validation, preflight, atomic write, rollback, and hot-reload path. Prefer the environment variable over `--token`; do not print the Admin token. Remote plaintext HTTP must not be used.
+When authentication is enabled, provide the MCP bearer token through the client's secret facility. Use `mcp-manager export` when the target client is supported instead of inventing a config shape.
 
-### stdio-only client
-
-Install the local `mcp-hub` binary and use the bridge:
+### stdio bridge
 
 ```bash
-MCP_HUB_TOKEN='...' mcp-hub stdio --connect https://mcp.example.com/mcp
+MCP_MANAGER_TOKEN='...' mcp-manager stdio --connect https://mcp.example.com/mcp
 ```
 
-Prefer an environment variable over `--token`. For local loopback Hub, omit authentication if the Hub is configured without it.
-
-Verify the remote Hub before modifying the client's MCP config:
+### Remote Admin
 
 ```bash
-MCP_HUB_TOKEN='...' mcp-hub status --endpoint https://mcp.example.com
-MCP_HUB_TOKEN='...' mcp-hub doctor --endpoint https://mcp.example.com
+MCP_MANAGER_ADMIN_TOKEN='...' mcp-manager admin list --endpoint https://mcp.example.com
+MCP_MANAGER_ADMIN_TOKEN='...' mcp-manager admin get <id> --endpoint https://mcp.example.com
+MCP_MANAGER_ADMIN_TOKEN='...' mcp-manager admin add <id> --file ./server.json --endpoint https://mcp.example.com
+MCP_MANAGER_ADMIN_TOKEN='...' mcp-manager admin edit <id> --file ./server.json --endpoint https://mcp.example.com
+MCP_MANAGER_ADMIN_TOKEN='...' mcp-manager admin delete <id> --endpoint https://mcp.example.com --yes
 ```
 
-## Downstream configuration
+Remote Admin reuses the authenticated Admin session, CSRF protection, ETag/CAS conflict checks, strict validation, preflight, atomic persistence, rollback, and hot reload. Remote plaintext HTTP is rejected except for loopback development.
 
-- `stdio` downstreams require `command`; use `args`, `cwd`, and `env` only when needed.
-- `streamable_http` downstreams require `url`; remote services must use HTTPS, while plain HTTP is only for literal loopback targets.
-- Explicitly forward required environment variables with server `env`, for example `"GITHUB_TOKEN": "${GITHUB_TOKEN}"`. Do not depend on ambient credential inheritance.
-- Never silently convert legacy SSE endpoints to Streamable HTTP.
-- Before adding an unfamiliar third-party stdio MCP, explain that it executes with the Hub service user's privileges.
-- Preserve existing `mcpServers` entries unless the user asks to replace/remove them.
+## Downstream safety
 
-## Upgrade workflow
+- `stdio` downstreams require `command`; use explicit `env` for credentials that must reach the child.
+- `streamable_http` downstreams require `url`; non-loopback remote targets require HTTPS.
+- Do not silently convert legacy SSE endpoints to Streamable HTTP.
+- Remember that stdio downstreams execute with the MCP Manager service user's privileges; this product is not a sandbox.
 
-1. Capture current binary version, config path, service status, and binary checksum/path.
-2. Back up the current binary and config.
-3. Install the requested/new stable version to a temporary path first.
-4. Run `<new-binary> validate --config <existing-config>`.
-5. Replace the binary atomically when practical and restart the service.
-6. Run all verification gates.
-7. If health fails, restore the old binary/config and restart; report the failure without deleting evidence/logs.
+## Rename migration
 
-Do not automatically merge dependency updates or migrate config semantics merely because a newer binary exists.
+When upgrading an existing MCP Hub installation to MCP Manager:
 
-## Repair workflow
+1. Back up the old binary/config/service files.
+2. Keep the existing JSON schema and `/mcp`/`/admin` endpoints; they do not need migration.
+3. Install the new `mcp-manager` binary alongside or atomically replace the old binary after validation.
+4. Existing `MCP_HUB_*` token variables may remain during the compatibility window. Prefer `MCP_MANAGER_*` for newly written service files.
+5. Rename service names/directories only when operationally useful; do not break a working deployment just for cosmetics.
+6. Verify with the new binary before removing any old compatibility artifact.
 
-Diagnose in this order:
+## Upgrade and rollback
 
-1. `mcp-hub validate --config ...`
-2. service/process state and recent logs
-3. listening socket and reverse-proxy reachability
-4. `mcp-hub status`
-5. `mcp-hub doctor`
-6. downstream-specific startup/connection failure
+Before an upgrade record the installed version, binary path/checksum, config path, service status, and reverse-proxy state. Validate the new binary against the existing config before replacing the running binary. If post-restart `status`/`doctor` or endpoint checks fail, restore the previous binary/config and restart it.
 
-Fix the narrowest confirmed cause. Do not replace a valid config wholesale to solve a single broken downstream.
-
-## Uninstall workflow
-
-Stop and disable the service first, then remove only the binary/service artifacts the user approved. Preserve config, environment files, and backups by default. Ask before deleting `/etc/mcp-hub`, user configuration, or downstream data.
-
-## Required completion report
+## Completion report
 
 Return:
 
-- deployment mode and target host/OS
-- installed MCP Hub version
-- binary path
-- config path
-- service manager/service name if any
+- mode and target OS/host
+- installed MCP Manager version
+- binary/config/service paths
 - MCP endpoint and Admin URL if enabled
-- health verification results
-- whether HTTPS/reverse proxy is active
-- backup/rollback location when an existing install was changed
-- any manual client-side step still required
+- verification results
+- HTTPS/reverse-proxy state
+- backup/rollback location for changed installations
+- any remaining manual client step
 
-Never include token values. If direct execution was unavailable, clearly label the result as a deployment plan rather than a completed deployment.
+Never include credential values.

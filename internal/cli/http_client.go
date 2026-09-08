@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	hubTokenEnv        = "MCP_HUB_TOKEN"
-	maxHubResponseSize = int64(8 * 1024 * 1024)
+	managerTokenEnv       = "MCP_MANAGER_TOKEN"
+	legacyHubTokenEnv     = "MCP_HUB_TOKEN"
+	maxHubResponseSize    = int64(8 * 1024 * 1024)
 )
 
 var errHubResponseTooLarge = errors.New("Hub response exceeds 8 MiB limit")
@@ -77,7 +78,10 @@ func hubToken(explicit string) string {
 	if explicit != "" {
 		return explicit
 	}
-	return os.Getenv(hubTokenEnv)
+	if token := os.Getenv(managerTokenEnv); token != "" {
+		return token
+	}
+	return os.Getenv(legacyHubTokenEnv)
 }
 
 func newHubHTTPClient(token string, timeout time.Duration) *http.Client {

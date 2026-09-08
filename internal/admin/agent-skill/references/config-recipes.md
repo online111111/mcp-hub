@@ -1,23 +1,18 @@
-# Configuration recipes
+# MCP Manager configuration recipes
 
-MCP Hub uses strict JSON. Keep `version: 1` and run `mcp-hub validate` after every generated change.
+The JSON schema keeps the historical top-level `hub` object during the product rename. Renaming the product does not require rewriting that schema or the `/mcp` and `/admin` endpoint paths.
 
-## Local/private baseline
+## Local-only Manager
 
 ```json
 {
   "version": 1,
   "hub": { "listen": "127.0.0.1:8080" },
-  "defaults": {
-    "startupTimeout": "20s",
-    "callTimeout": "60s",
-    "maxConcurrency": 8
-  },
   "mcpServers": {}
 }
 ```
 
-## Public VPS baseline
+## Public Manager behind HTTPS reverse proxy
 
 ```json
 {
@@ -28,77 +23,60 @@ MCP Hub uses strict JSON. Keep `version: 1` and run `mcp-hub validate` after eve
     "publicUrl": "https://mcp.example.com",
     "allowedHosts": ["mcp.example.com"],
     "trustedProxies": ["127.0.0.1/32", "::1/128"],
-    "auth": { "bearerToken": "${MCP_HUB_TOKEN}" },
+    "auth": { "bearerToken": "${MCP_MANAGER_TOKEN}" },
     "admin": {
       "enabled": true,
-      "token": "${MCP_HUB_ADMIN_TOKEN}",
+      "token": "${MCP_MANAGER_ADMIN_TOKEN}",
       "sessionTimeout": "30m"
     }
-  },
-  "defaults": {
-    "startupTimeout": "20s",
-    "callTimeout": "60s",
-    "maxConcurrency": 8
   },
   "mcpServers": {}
 }
 ```
 
-Public requirements:
-
-- HTTPS `publicUrl`
-- expected hostname only in `allowedHosts`
-- trusted proxy CIDRs only for the real proxy hop
-- MCP/Admin tokens distinct and at least 32 characters after environment expansion
+Existing deployments may keep `${MCP_HUB_TOKEN}` and `${MCP_HUB_ADMIN_TOKEN}` while migrating. Do not silently rotate credentials just to adopt the new product name.
 
 ## stdio downstream
 
 ```json
-"memory": {
+{
+  "enabled": true,
+  "type": "stdio",
+  "command": "/usr/bin/node",
+  "args": ["/opt/tool/server.js"],
+  "cwd": "/opt/tool",
+  "env": {
+    "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+  }
+}
+```
+
+Use explicit `env` entries for credentials; ambient credentials are intentionally not inherited by default.
+
+## Streamable HTTP downstream
+
+```json
+{
+  "enabled": true,
+  "type": "streamable_http",
+  "url": "https://tools.example.com/mcp",
+  "headers": {
+    "Authorization": "Bearer ${REMOTE_TOKEN}"
+  }
+}
+```
+
+Remote non-loopback HTTP must use HTTPS. Redirects are rejected to avoid credential forwarding.
+
+## Remote Admin file
+
+`mcp-manager admin add/edit --file` expects exactly one server object, not the full root configuration:
+
+```json
+{
   "enabled": true,
   "type": "stdio",
   "command": "npx",
-  "args": ["-y", "@modelcontextprotocol/server-memory"],
-  "env": {},
-  "tools": { "disabled": [] }
+  "args": ["-y", "@modelcontextprotocol/server-filesystem", "/srv/data"]
 }
 ```
-
-For required credentials, explicitly opt in:
-
-```json
-"env": {
-  "GITHUB_TOKEN": "${GITHUB_TOKEN}"
-}
-```
-
-Hub intentionally does not pass arbitrary ambient credentials to stdio children.
-
-## Remote Streamable HTTP downstream
-
-```json
-"remote-tools": {
-  "enabled": true,
-  "type": "streamable_http",
-  "url": "https://provider.example/mcp",
-  "headers": {
-    "Authorization": "Bearer ${REMOTE_TOKEN}"
-  },
-  "tools": { "disabled": [] }
-}
-```
-
-Remote downstreams require HTTPS. Plain HTTP is only acceptable for literal loopback targets. Do not put URL credentials in userinfo/query strings.
-
-## Safe edit procedure
-
-1. Read and preserve existing JSON.
-2. Modify the smallest intended subtree.
-3. Preserve unrelated downstreams and secret `${ENV}` references.
-4. Write to a temporary/staged file when operating outside the Admin API.
-5. Run `mcp-hub validate --config <staged>`.
-6. Back up the live config.
-7. Atomically replace when possible.
-8. Verify runtime after reload/restart.
-
-Connection-changing Admin saves have runtime preflight. CLI `validate` performs strict decode/resolution but does not start downstream processes or make downstream network calls.

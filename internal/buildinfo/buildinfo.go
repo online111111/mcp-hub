@@ -3,7 +3,7 @@
 // sensible source-build default so every surface reports the same identity.
 package buildinfo
 
-const Name = "mcp-hub"
+const Name = "mcp-manager"
 
 var (
 	Version   = "0.4.0"
