@@ -1,8 +1,15 @@
 # MCP Manager
 
+[![Release](https://img.shields.io/github/v/release/online111111/mcp-manager?display_name=tag)](https://github.com/online111111/mcp-manager/releases/latest)
+[![CI](https://github.com/online111111/mcp-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/online111111/mcp-manager/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white)](go.mod)
+
 **English** | [简体中文](README.zh-CN.md)
 
-**MCP Manager** is a lightweight self-hosted MCP gateway and management console. Configure downstream MCP services once, then expose one managed Streamable HTTP endpoint to IDEs, agents, and stdio-only clients.
+**MCP Manager** is a lightweight, self-hosted **Model Context Protocol (MCP) gateway, aggregator, proxy, and management console**. Configure local stdio and remote Streamable HTTP MCP servers once, then expose one managed `/mcp` endpoint to IDEs, coding agents, AI assistants, and stdio-only clients.
+
+**Latest release:** [Download MCP Manager](https://github.com/online111111/mcp-manager/releases/latest) · Windows / Linux / macOS · amd64 / arm64
 
 > Compatibility note: v0.4.0 keeps the existing JSON schema and `/mcp`/`/admin` endpoints so existing deployments can adopt the current MCP Manager binary without rewriting their configuration.
 
@@ -211,10 +218,6 @@ Assets use names such as `mcp-manager-0.4.0-linux-amd64.tar.gz`.
 - [LINUX DO](https://linux.do/) — MCP Manager recognizes and supports the LINUX DO community.
 - [烧饼论坛 (sb.sb)](https://sb.sb/) — discussion, usage feedback, and sharing MCP / Agent setups.
 
-## License
-
-MCP Manager is released under the [MIT License](LICENSE).
-
 ## Documentation
 
 - [Configuration](docs/CONFIG.md)
@@ -228,6 +231,9 @@ MCP Manager is released under the [MIT License](LICENSE).
 
 MCP Manager is a trusted personal gateway, **not a sandbox**. stdio downstreams execute with the Manager service user's privileges. Run it as a dedicated non-root account and configure only MCP services you trust.
 
+## License
+
+MCP Manager is released under the [MIT License](LICENSE).
 
 ## Production operation / 长期运行
 
