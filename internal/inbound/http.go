@@ -396,6 +396,10 @@ func (s *HTTPServer) authorizedBearer(req *http.Request) bool {
 	tokens := s.bearerTokens
 	if s.bearerTokensProvider != nil {
 		tokens = s.bearerTokensProvider()
+	} else if provider, ok := s.manager.(interface{ BearerTokens() []string }); ok {
+		// The runtime controller supplies the hot-reloaded token set. Keeping the
+		// dependency structural avoids expanding ManagerCallback just for auth.
+		tokens = provider.BearerTokens()
 	}
 	if len(tokens) == 0 && s.bearerToken != "" {
 		tokens = []string{s.bearerToken}
