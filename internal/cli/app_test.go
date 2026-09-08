@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/online111111/mcp-manager/internal/buildinfo"
 	"github.com/online111111/mcp-manager/internal/inbound"
 )
 
@@ -210,8 +211,9 @@ func TestCLI_Version(t *testing.T) {
 	if code := Run([]string{"version"}, &stdout, &stderr); code != ExitSuccess {
 		t.Fatalf("version exited with %d: %s", code, stderr.String())
 	}
-	if got := strings.TrimSpace(stdout.String()); got != "mcp-manager 0.4.0" {
-		t.Fatalf("unexpected version output %q", got)
+	want := fmt.Sprintf("%s %s", buildinfo.Name, buildinfo.Version)
+	if got := strings.TrimSpace(stdout.String()); got != want {
+		t.Fatalf("unexpected version output %q; want %q", got, want)
 	}
 }
 
