@@ -46,6 +46,45 @@ Diagnostics:
 
 Repository-aware coding, review, and deployment agents should start with [`AGENTS.md`](AGENTS.md).
 
+## Deploy with an AI agent
+
+If your agent can access the target server, copy the following prompt and provide it with the authorized host/connection context. The prompt is designed for both fresh installations and safe in-place upgrades.
+
+```text
+Deploy MCP Manager from https://github.com/online111111/mcp-manager to the server I have authorized you to manage. Perform the deployment yourself using the available shell/SSH/server tools; do not merely give me a list of commands.
+
+Before changing anything:
+1. Read AGENTS.md, README.md, docs/VPS.md, docs/SECURITY.md, and docs/CONFIG.md from the repository.
+2. Inspect the target OS, architecture, privileges, existing MCP Manager installation, service manager, reverse proxy, listening ports, and relevant firewall state.
+3. If an existing installation is present, back up its binary, config, environment file, service definition, and reverse-proxy configuration before modifying it. Preserve the existing JSON schema, /mcp and /admin routes, and working credentials unless migration or rotation is actually required.
+4. Prefer the latest appropriate GitHub Release and verify its SHA256SUMS. If no formal Release exists, use an exact current main commit, record its commit SHA, build the mcp-manager binary from that revision, and run the repository validation/tests that are practical on the target environment before installing it.
+
+Deployment requirements:
+- Run MCP Manager as a dedicated non-root service account where practical.
+- Bind MCP Manager to loopback (normally 127.0.0.1:8080). Do not expose port 8080 directly to the public Internet.
+- For a new deployment, use distinct high-entropy MCP and Admin credentials via MCP_MANAGER_TOKEN and MCP_MANAGER_ADMIN_TOKEN. Store them in a permission-restricted environment file and never print their values in logs, chat, screenshots, or the final report.
+- Create or adapt config.json from the repository examples and validate it with `mcp-manager validate` before starting/restarting the service.
+- Configure a persistent service using the host's native service manager (systemd on normal Linux VPS deployments).
+- If public access is required, place Caddy or Nginx in front of the loopback service, terminate HTTPS there, and follow docs/VPS.md and docs/SECURITY.md. Do not weaken Host/Origin/authentication requirements just to make the deployment work.
+- Avoid unrelated firewall, SSH, package, or proxy changes. Prefer reversible changes and keep rollback material until verification is complete.
+
+After deployment, verify at minimum:
+- the service is running and survives a service-manager status check;
+- `mcp-manager status` and `mcp-manager doctor` succeed against the intended endpoint;
+- `/healthz` and `/readyz` behave as expected;
+- `/admin/` is reachable and authenticates correctly when Admin is enabled;
+- the `/mcp` endpoint is reachable through the intended local or HTTPS path;
+- at least one representative MCP client/tool path works when such a client/downstream is available.
+
+If the deployment makes a previously healthy installation unhealthy, roll back first and then diagnose.
+
+When finished, report only: installed version or exact commit SHA, binary/config/environment/service/proxy paths, public/local endpoints, verification results, and backup/rollback locations. Never reveal secret values.
+
+Use the safest reversible choice for environment-specific details and continue autonomously. Stop only when required access is missing or a genuinely blocking input cannot be inferred safely.
+```
+
+For more deployment detail, see [`AGENTS.md`](AGENTS.md) and [VPS deployment](docs/VPS.md). The embedded `mcp-manager-deployer` Skill under `internal/admin/agent-skill/` provides a reusable workflow for compatible agents.
+
 ## Authentication environment variables
 
 New installations use:
