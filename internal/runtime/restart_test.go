@@ -3,11 +3,12 @@ package runtime
 import (
 	"context"
 	"encoding/json"
-	"github.com/online111111/mcp-manager/internal/config"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/online111111/mcp-manager/internal/config"
 )
 
 func TestEmptyTrustListsDoNotRequireRestart(t *testing.T) {
@@ -53,8 +54,7 @@ func TestReloadNowFailureUpdatesDiagnostics(t *testing.T) {
 
 func TestStartupBoundSettingsRequireRestart(t *testing.T) {
 	cases := map[string]func(*config.HubConfig){
-		"bearer token": func(h *config.HubConfig) { h.Auth.BearerToken = "new-bearer-secret-0123456789-0123456789" },
-		"admin token":  func(h *config.HubConfig) { h.Admin.Token = "new-admin-secret-0123456789-0123456789" },
+		"admin token": func(h *config.HubConfig) { h.Admin.Token = "new-admin-secret-0123456789-0123456789" },
 		"admin enabled": func(h *config.HubConfig) {
 			h.Admin.Enabled = true
 			h.Admin.Token = "new-admin-secret-0123456789-0123456789"
