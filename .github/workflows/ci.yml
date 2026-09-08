@@ -40,7 +40,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba8058258cd3c42e5aac5ba805825 # v7.0.1
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -100,48 +100,31 @@ jobs:
           node internal/admin/browsertest/live-smoke.mjs
       - name: Build MCP Manager
         run: go build -trimpath ./cmd/mcp-manager
-      - name: Windows release smoke
+      - name: Windows PowerShell 5.1 launcher smoke
         if: runner.os == 'Windows' && matrix.current
         shell: pwsh
         run: |
-          go build -trimpath -o mcp-manager.exe ./cmd/mcp-manager
-          .\mcp-manager.exe version
-          @'
-          {
-            "version": 1,
-            "hub": {
-              "listen": "127.0.0.1:18082",
-              "admin": {
-                "enabled": true,
-                "token": "windows-ci-admin-token-0123456789-abcdef"
-              }
-            },
-            "mcpServers": {}
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force windows-package | Out-Null
+          go build -trimpath -o windows-package/mcp-manager.exe ./cmd/mcp-manager
+          Copy-Item scripts/windows/start-mcp-manager.ps1 windows-package/start-mcp-manager.ps1
+          Copy-Item scripts/windows/start-mcp-manager.cmd windows-package/start-mcp-manager.cmd
+          Remove-Item windows-package/config.json -Force -ErrorAction SilentlyContinue
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PWD\windows-package\start-mcp-manager.ps1" -NoBrowser -ExitAfterReady
+          if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell 5.1 launcher smoke failed with exit code $LASTEXITCODE" }
+          $bytes = [System.IO.File]::ReadAllBytes("$PWD\windows-package\config.json")
+          if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+            throw 'Launcher generated config.json with a UTF-8 BOM'
           }
-          '@ | Set-Content -Encoding UTF8 windows-smoke.json
-          .\mcp-manager.exe validate --config .\windows-smoke.json
-          $p = Start-Process -FilePath .\mcp-manager.exe -ArgumentList @('serve','--config','.\windows-smoke.json') -PassThru -NoNewWindow
-          try {
-            for ($i = 0; $i -lt 50; $i++) {
-              try {
-                $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:18082/readyz -TimeoutSec 1
-                if ($r.StatusCode -eq 200) { break }
-              } catch {}
-              Start-Sleep -Milliseconds 100
-            }
-            .\mcp-manager.exe doctor --endpoint http://127.0.0.1:18082
-            $admin = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:18082/admin/ -TimeoutSec 2
-            if ($admin.StatusCode -ne 200) { throw "Admin UI smoke failed" }
-          } finally {
-            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-          }
+          & "$PWD\windows-package\mcp-manager.exe" validate --config "$PWD\windows-package\config.json"
+          if ($LASTEXITCODE -ne 0) { throw "Packaged config validation failed with exit code $LASTEXITCODE" }
 
   vulnerability-scan:
     name: Govulncheck / Go 1.27.1
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba8058258cd3c42e5aac5ba805825 # v7.0.1
       - name: Govulncheck
         uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1
         with:
