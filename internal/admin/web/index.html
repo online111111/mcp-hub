@@ -7,6 +7,7 @@
     <meta name="color-scheme" content="light" />
     <title>MCP Manager 管理台</title>
     <link rel="stylesheet" href="/admin/app.css?v=20260908-manager" />
+    <link rel="stylesheet" href="/admin/enhancements.css?v=20260908-access" />
   </head>
   <body>
     <div id="toastStack" class="toast-stack" aria-live="polite"></div>
@@ -62,10 +63,7 @@
               <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>调用</span><small>最近记录</small>
             </button>
             <button class="nav-item" data-section="connectSection" type="button">
-              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 8l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(0 -1)"/></svg><span>接入</span><small>客户端配置</small>
-            </button>
-            <button class="nav-item" data-section="agentDeploySection" type="button">
-              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-5 2 2-14"/></svg><span>Agent</span><small>自动部署</small>
+              <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0M16 8l1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(0 -1)"/></svg><span>接入</span><small>Token / 客户端 / Agent</small>
             </button>
           </nav>
           <div class="sidebar-meta"><span>版本</span><strong id="hubVersion">—</strong><span>运行时间</span><strong id="hubUptime">—</strong></div>
@@ -87,38 +85,56 @@
 
           <section id="serversSection" class="panel section-block">
             <div class="section-heading">
-              <div><span class="kicker">DOWNSTREAMS</span><h2>下游 MCP 服务</h2><p>直接用表单添加或编辑，不需要手写整段 JSON。保存后会原子写入并热重载。</p></div>
+              <div><span class="kicker">DOWNSTREAMS</span><h2>下游 MCP 服务</h2><p>搜索、分页管理所有下游服务；保存后仍使用原子写入和热重载。</p></div>
               <div class="heading-actions"><span id="serverSummary" class="muted-inline">0 个服务</span><button id="addServer" class="button primary" type="button">+ 添加服务</button></div>
             </div>
+            <div class="list-toolbar">
+              <input id="serverSearch" type="search" aria-label="搜索下游 MCP 服务" placeholder="搜索服务 ID、类型、命令或 URL…" />
+              <label class="compact-select"><span>每页</span><select id="serverPageSize"><option value="6">6</option><option value="12" selected>12</option><option value="24">24</option></select></label>
+            </div>
             <div id="servers" class="server-list"></div>
+            <div id="serverPagination" class="pagination" aria-label="下游服务分页"></div>
           </section>
 
           <section id="callsSection" class="panel section-block">
             <div class="section-heading calls-heading">
-              <div><span class="kicker">ACTIVITY</span><h2>最近调用</h2><p>仅显示脱敏后的工具、服务、结果和耗时。</p></div>
+              <div><span class="kicker">ACTIVITY</span><h2>最近调用</h2><p>仅显示脱敏后的工具、服务、结果和耗时，并支持筛选与分页。</p></div>
               <button id="refresh" class="button secondary" type="button">刷新记录</button>
             </div>
-            <div class="call-toolbar"><input id="callSearch" aria-label="搜索工具或服务" type="search" placeholder="搜索工具或服务…" /><select id="callOutcome" aria-label="筛选调用结果"><option value="all">全部结果</option><option value="success">仅成功</option><option value="error">仅失败</option></select></div>
+            <div class="call-toolbar"><input id="callSearch" aria-label="搜索工具或服务" type="search" placeholder="搜索工具或服务…" /><select id="callOutcome" aria-label="筛选调用结果"><option value="all">全部结果</option><option value="success">仅成功</option><option value="error">仅失败</option></select><label class="compact-select"><span>每页</span><select id="callPageSize"><option value="10">10</option><option value="20" selected>20</option><option value="50">50</option></select></label></div>
             <div class="table-wrap" tabindex="0" role="region" aria-label="调用记录，可横向滚动"><table class="call-table"><thead><tr><th>工具</th><th>服务</th><th>结果</th><th>耗时</th><th>时间</th></tr></thead><tbody id="calls"></tbody></table></div>
             <div id="callsEmpty" class="empty-state hidden"><strong>没有匹配的调用记录</strong><p>调整筛选条件或稍后刷新。</p></div>
+            <div id="callPagination" class="pagination" aria-label="调用记录分页"></div>
           </section>
 
           <section id="connectSection" class="panel section-block">
-            <div class="section-heading"><div><span class="kicker">CLIENT ACCESS</span><h2>客户端接入</h2><p>公网入口统一走 HTTPS。MCP Bearer Token 不会在管理网页中回显。</p></div></div>
-            <div class="connection-grid">
-              <article class="connection-card"><div class="connection-title"><div><span class="mini-label">推荐</span><h3>Streamable HTTP</h3></div><button class="button tiny secondary copy-button" data-copy-target="mcpEndpoint" type="button">复制地址</button></div><code id="mcpEndpoint"></code><p>适用于原生支持远程 MCP 的客户端和 Agent。</p></article>
-              <article class="connection-card"><div class="connection-title"><div><span class="mini-label">兼容</span><h3>stdio bridge</h3></div><button class="button tiny secondary copy-button" data-copy-target="stdioCommand" type="button">复制命令</button></div><code id="stdioCommand"></code><p>适用于只接受本地 stdio MCP 的客户端。</p></article>
-            </div>
-            <div class="notice info"><strong>认证提示</strong><span>客户端连接需要 MCP Bearer Token；管理员登录使用的是另一枚 Admin Token，两者不要混用。</span></div>
-          </section>
+            <div class="section-heading"><div><span class="kicker">CLIENT ACCESS</span><h2>客户端接入</h2><p>在这里管理 MCP 调用 Token，然后手动复制配置，或让当前客户端电脑上的 Agent 自动完成接入。</p></div></div>
 
-          <section id="agentDeploySection" class="panel section-block">
-            <div class="section-heading"><div><span class="kicker">AGENT DEPLOYMENT</span><h2>Agent 自动部署</h2><p>把内置 Skill 或部署 Prompt 交给支持命令执行/SSH 的 Agent，即可部署、迁移、升级和恢复 MCP Manager。</p></div></div>
-            <div class="connection-grid">
-              <article class="connection-card"><div class="connection-title"><div><span class="mini-label">完整</span><h3>MCP Manager Deployer Skill</h3></div><a class="button tiny primary" href="/api/admin/v1/agent-skill.zip" download="skill.zip">下载 Skill</a></div><code>mcp-manager-deployer / skill.zip</code><p>包含服务端、客户端、迁移、升级、验证、回滚流程和带 SHA256 校验的 Release 安装脚本。</p></article>
-              <article class="connection-card"><div class="connection-title"><div><span class="mini-label">通用</span><h3>复制 Agent Prompt</h3></div><button id="copyAgentPrompt" class="button tiny secondary" type="button">复制 Prompt</button></div><code>适用于不支持 Skill 的通用 Agent</code><p>有 shell/SSH 时直接执行；没有执行能力时输出精确命令。</p></article>
+            <article class="access-token-panel">
+              <div class="access-token-copy">
+                <span class="mini-label">MCP ACCESS TOKENS</span>
+                <h3>访问 Token</h3>
+                <p>保留原来的 Bearer Token 设计，只允许增加和删除多个等价 Token；它们都能调用同一个 `/mcp` 服务。</p>
+              </div>
+              <div class="token-controls">
+                <label class="field compact-field"><span>当前用于接入的 Token</span><select id="accessTokenSelect"></select></label>
+                <div class="token-value-row"><input id="accessTokenValue" type="password" readonly aria-label="当前 MCP Token" /><button id="toggleAccessToken" class="button tiny secondary" type="button">显示</button><button id="copyAccessToken" class="button tiny secondary" type="button">复制</button><button id="deleteAccessToken" class="button tiny danger" type="button">删除</button></div>
+                <form id="addTokenForm" class="token-add-row"><input id="newAccessToken" autocomplete="off" placeholder="输入至少 32 字符；留空则自动生成" /><button class="button primary" type="submit">+ 新增 Token</button></form>
+              </div>
+            </article>
+
+            <div class="connection-grid access-grid">
+              <article class="connection-card"><div class="connection-title"><div><span class="mini-label">ENDPOINT</span><h3>Streamable HTTP</h3></div><button class="button tiny secondary copy-button" data-copy-target="mcpEndpoint" type="button">复制地址</button></div><code id="mcpEndpoint"></code><p>原生支持远程 MCP 的客户端优先使用这个 HTTPS Endpoint。</p></article>
+              <article class="connection-card"><div class="connection-title"><div><span class="mini-label">AUTH</span><h3>Authorization Header</h3></div><button class="button tiny secondary copy-button" data-copy-target="httpAuthorization" type="button">复制 Header</button></div><code id="httpAuthorization"></code><p>选择上面的 Token 后自动生成。</p></article>
+              <article class="connection-card wide-card"><div class="connection-title"><div><span class="mini-label">STDIO FALLBACK</span><h3>stdio bridge</h3></div><button class="button tiny secondary copy-button" data-copy-target="stdioCommand" type="button">复制命令</button></div><code id="stdioCommand"></code><p>只支持本地 stdio MCP 的客户端可以通过本机 `mcp-manager` 桥接到远端。</p></article>
             </div>
-            <div class="notice info"><strong>安全默认值</strong><span>不会直接暴露 8080；公网部署默认 loopback + HTTPS 反代；修改现有部署前先备份并在失败时回滚。</span></div>
+
+            <div class="subsection-heading"><span class="kicker">AGENT ASSISTED SETUP</span><h3>让客户端 Agent 自动接入</h3><p>这里的 Agent 只配置你当前使用的客户端电脑，不会部署、升级或修改远端 MCP Manager 服务端。</p></div>
+            <div class="connection-grid">
+              <article class="connection-card"><div class="connection-title"><div><span class="mini-label">推荐</span><h3>MCP Manager Connector</h3></div><a class="button tiny primary" href="/api/admin/v1/client-skill.zip" download="skill.zip">下载 Skill</a></div><code>mcp-manager-connector / skill.zip</code><p>适用于支持 Skill 的 Agent：自动识别本机 Codex、Claude、Cursor、OpenCode、VS Code 等客户端，并安全合并配置。</p></article>
+              <article class="connection-card"><div class="connection-title"><div><span class="mini-label">通用</span><h3>复制客户端 Agent Prompt</h3></div><button id="copyClientPrompt" class="button tiny secondary" type="button">复制 Prompt</button></div><code>自动带入当前 Endpoint + 已选择的 MCP Token</code><p>适用于不支持 Skill 的通用 Agent；Prompt 明确禁止它去修改远端服务器。</p></article>
+            </div>
+            <div class="notice info"><strong>凭证边界</strong><span>MCP Access Token 只用于客户端调用；Admin Token 只用于登录这个管理台。新增/删除 MCP Token 会热生效，不需要重启 MCP Manager。</span></div>
           </section>
         </div>
       </section>
@@ -153,6 +169,6 @@
         <div class="dialog-actions"><button id="cancelEditor" class="button secondary" type="button">取消</button><button id="saveServer" class="button primary" type="submit">保存并热重载</button></div>
       </form>
     </dialog>
-    <script type="module" src="/admin/app.js?v=20260908-manager"></script>
+    <script type="module" src="/admin/app.js?v=20260908-access"></script>
   </body>
 </html>
