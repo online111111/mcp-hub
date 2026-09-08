@@ -106,7 +106,10 @@ func (p *Publisher) RemoveServer(serverID string) (*catalog.Snapshot, error) {
 // dispatchTool is the raw tool handler registered with Server.AddTool.
 // It delegates tool calls to the injected routerCallback without holding publishMu.
 func (p *Publisher) dispatchTool(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	if p.routerCallback == nil {
+	p.publishMu.RLock()
+	callback := p.routerCallback
+	p.publishMu.RUnlock()
+	if callback == nil {
 		return &mcp.CallToolResult{
 			IsError: true,
 			Content: []mcp.Content{
@@ -114,7 +117,7 @@ func (p *Publisher) dispatchTool(ctx context.Context, req *mcp.CallToolRequest) 
 			},
 		}, nil
 	}
-	return p.routerCallback(ctx, req)
+	return callback(ctx, req)
 }
 
 // SetRouterCallback updates the injected router callback.

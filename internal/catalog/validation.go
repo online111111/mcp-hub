@@ -1,9 +1,11 @@
 package catalog
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -80,7 +82,7 @@ func ValidateTool(tool *mcp.Tool) error {
 		return fmt.Errorf("%w: size %d bytes > %d bytes", ErrToolSizeExceeded, len(data), MaxToolDefinitionBytes)
 	}
 
-	return nil
+	return validateSDKRegistration(tool)
 }
 
 // CloneAndAssignPublicName validates the tool, marshals it to JSON to check size,
@@ -105,6 +107,29 @@ func CloneAndAssignPublicName(tool *mcp.Tool, publicName string) (*mcp.Tool, int
 		return nil, size, fmt.Errorf("tool unmarshaling error: %w", err)
 	}
 	cloned.Name = publicName
+	encoded, err := json.Marshal(&cloned)
+	if err != nil {
+		return nil, 0, err
+	}
+	size = len(encoded)
+	if size > MaxToolDefinitionBytes {
+		return nil, size, ErrToolSizeExceeded
+	}
 
 	return &cloned, size, nil
+}
+
+// Validate against the pinned SDK before touching the live catalog. AddTool has
+// panic-based validation (including parameter-header annotations). An isolated
+// server has no sessions or notification goroutines; rejecting a definition here
+// preserves the live catalog instead of recovering after a partial publication.
+func validateSDKRegistration(tool *mcp.Tool) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = errors.New("tool definition is incompatible with MCP SDK registration")
+		}
+	}()
+	probe := mcp.NewServer(&mcp.Implementation{Name: "mcp-manager-validator", Version: "1"}, &mcp.ServerOptions{Logger: slog.New(slog.DiscardHandler)})
+	probe.AddTool(tool, func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) { return nil, nil })
+	return nil
 }

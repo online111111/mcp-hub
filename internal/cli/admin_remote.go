@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -110,6 +111,7 @@ func runAdminList(args []string, stdout, stderr io.Writer) int {
 	if code != ExitSuccess {
 		return code
 	}
+	defer client.close()
 	cfg, _, err := client.getConfig()
 	if err != nil {
 		return printAdminError(stderr, err)
@@ -163,6 +165,7 @@ func runAdminGet(args []string, stdout, stderr io.Writer) int {
 	if code != ExitSuccess {
 		return code
 	}
+	defer client.close()
 	cfg, _, err := client.getConfig()
 	if err != nil {
 		return printAdminError(stderr, err)
@@ -222,6 +225,7 @@ func runAdminPut(args []string, stdout, stderr io.Writer, requireExisting bool) 
 	if code != ExitSuccess {
 		return code
 	}
+	defer client.close()
 	cfg, etag, err := client.getConfig()
 	if err != nil {
 		return printAdminError(stderr, err)
@@ -266,6 +270,7 @@ func runAdminDelete(args []string, stdout, stderr io.Writer) int {
 	if code != ExitSuccess {
 		return code
 	}
+	defer client.close()
 	cfg, etag, err := client.getConfig()
 	if err != nil {
 		return printAdminError(stderr, err)
@@ -340,7 +345,7 @@ func newRemoteAdminClient(endpoint, token string, stderr io.Writer) (*remoteAdmi
 	client := &http.Client{
 		Jar:       jar,
 		Transport: bearerTransport{},
-		Timeout:   20 * time.Second,
+		Timeout:   60 * time.Second,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -405,6 +410,23 @@ func (c *remoteAdminClient) login(token string) error {
 	}
 	c.csrf = session.CSRF
 	return nil
+}
+
+// close releases the per-command Admin session, including error paths. A failed
+// best-effort logout must not turn a successful write into a retryable failure.
+func (c *remoteAdminClient) close() {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/admin/v1/auth/logout", strings.NewReader("{}"))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-CSRF-Token", c.csrf)
+	resp, err := c.client.Do(req)
+	if err == nil {
+		_ = resp.Body.Close()
+	}
 }
 
 func (c *remoteAdminClient) getConfig() (*remoteAdminConfig, string, error) {

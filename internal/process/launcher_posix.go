@@ -125,7 +125,7 @@ func startPlatform(ctx context.Context, spec Spec, opts LaunchOptions) (Process,
 	// terminated consistently.
 	cmd := exec.Command(resolved.Spec.Command, resolved.Spec.Args...)
 	cmd.Dir = resolved.Spec.Dir
-	if len(resolved.Spec.Env) > 0 {
+	if resolved.Spec.Env != nil {
 		cmd.Env = resolved.Spec.Env
 	}
 	if opts.Stderr != nil {

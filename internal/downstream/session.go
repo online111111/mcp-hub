@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/online111111/mcp-manager/internal/buildinfo"
 	"github.com/online111111/mcp-manager/internal/catalog"
+	"github.com/online111111/mcp-manager/internal/wirelimit"
 )
 
 // Session wraps an official MCP SDK ClientSession with lifecycle management,
@@ -59,7 +60,7 @@ func DialIO(ctx context.Context, opts IOOptions) (*Session, error) {
 	}
 
 	transport := &legacyStdioTransport{base: &mcp.IOTransport{
-		Reader: opts.Reader,
+		Reader: wirelimit.New(opts.Reader, wirelimit.JSONLines),
 		Writer: opts.Writer,
 	}}
 
@@ -139,6 +140,13 @@ func dialTransport(
 	}
 
 	s.rawSession = cs
+
+	// A peer disconnect must become visible to the coordinator so it can
+	// retire the failed generation and reconnect. Watch the SDK, not only ctx.
+	go func() {
+		_ = cs.Wait()
+		_ = s.Close()
+	}()
 
 	// Dedicated background worker for OnToolListChanged callback, ensuring the SDK handler never blocks.
 	if onToolListChanged != nil {
@@ -316,6 +324,7 @@ func (s *Session) ListAllTools(ctx context.Context) ([]*mcp.Tool, error) {
 
 func (s *Session) fetchPages(ctx context.Context) ([]*mcp.Tool, error) {
 	var allTools []*mcp.Tool
+	discoveryBytes := 0
 	seenCursors := make(map[string]struct{})
 	seenNames := make(map[string]struct{})
 	cursor := ""
@@ -343,6 +352,14 @@ func (s *Session) fetchPages(ctx context.Context) ([]*mcp.Tool, error) {
 			}
 			if _, exists := seenNames[t.Name]; exists {
 				return nil, fmt.Errorf("%w: tool %q", ErrDuplicateToolName, t.Name)
+			}
+			encoded, err := json.Marshal(t)
+			if err != nil {
+				return nil, fmt.Errorf("invalid tool definition encoding")
+			}
+			discoveryBytes += len(encoded)
+			if len(allTools) >= 4096 || discoveryBytes > catalog.MaxCatalogJSONBytes {
+				return nil, fmt.Errorf("tool discovery exceeds 4096 definitions or 8 MiB")
 			}
 			seenNames[t.Name] = struct{}{}
 			allTools = append(allTools, t)

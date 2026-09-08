@@ -158,7 +158,7 @@ SHA256SUMS
 
 内置 `mcp-manager-deployer` Skill 的安装脚本直接使用规范仓库 `online111111/mcp-manager`，不再依赖旧仓库 slug 回退。
 
-在正式 `v0.4.0` tag/Release 出现前，`main`/PR 构建仍应标注为 release candidate/source build。
+安装时核对实际 Release、对应 tag 与 SHA256SUMS；仅有 main/PR 源码版本号不代表正式发行。长期运行要求见 [PRODUCTION.md](PRODUCTION.md)。
 
 ## 10. 上线检查
 

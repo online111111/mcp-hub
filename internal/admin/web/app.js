@@ -29,47 +29,73 @@ const state = {
   editingId: null,
   editorEtag: "",
   refreshing: false,
+  refreshTicket: null,
+  statusTicket: null,
+  authEpoch: 0,
+  dataEpoch: 0,
 };
 
 async function api(path, options = {}, { withMeta = false } = {}) {
+  const epoch = state.authEpoch;
   const headers = new Headers(options.headers || {});
   if (options.body !== undefined) {
     headers.set("Content-Type", "application/json");
     headers.set("X-CSRF-Token", state.csrf);
   }
-
-  let response;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), options.body === undefined ? 15000 : 60000);
   try {
-    response = await fetch(`/api/admin/v1${path}`, {
-      ...options,
-      headers,
-      credentials: "same-origin",
+    const response = await fetch(`/api/admin/v1${path}`, {
+      ...options, headers, credentials: "same-origin", signal: controller.signal,
     });
-  } catch {
-    throw new Error("无法连接到 MCP Manager，请检查服务状态");
+    const text = await response.text();
+    if (epoch !== state.authEpoch) {
+      const error = new Error("已忽略旧会话的响应");
+      error.staleSession = true;
+      throw error;
+    }
+    if (response.status === 401) {
+      if (path !== "/auth/login") showLogin();
+      throw new Error(path === "/auth/login" ? "管理密钥不正确，请重新复制 Admin Token" : "登录已失效，请重新登录");
+    }
+    if (!response.ok) {
+      const message = response.status === 409
+        ? "配置已被其他操作修改。请刷新后重新编辑，当前草稿不会自动覆盖新配置。"
+        : response.status === 429 ? "操作过于频繁，请稍后再试" : text.trim() || `请求失败 (${response.status})`;
+      throw new Error(message);
+    }
+    let data = null;
+    try { if (text) data = JSON.parse(text); }
+    catch { throw new Error("MCP Manager 返回了无法解析的数据"); }
+    return withMeta ? { data, etag: response.headers.get("ETag") || "" } : data;
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error("请求超时，请检查服务状态后重试；写入操作请先刷新确认结果");
+    if (error instanceof TypeError) throw new Error("无法连接到 MCP Manager，请检查服务状态");
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
   }
-
-  if (response.status === 401) {
-    showLogin();
-    throw new Error("登录已失效，请重新登录");
-  }
-
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(text.trim() || `请求失败 (${response.status})`);
-  }
-
-  let data = null;
-  try {
-    if (text) data = JSON.parse(text);
-  } catch {
-    throw new Error("MCP Manager 返回了无法解析的数据");
-  }
-  return withMeta ? { data, etag: response.headers.get("ETag") || "" } : data;
 }
 
 function showLogin() {
+  // Invalidate pending requests before clearing secrets; late responses may not
+  // repopulate a logged-out page, including its hidden DOM.
+  Object.assign(state, {
+    csrf: "", etag: "", editorEtag: "", config: null, status: null, tokens: [],
+    selectedTokenIndex: null, selectNewestToken: false, editingId: null,
+    refreshing: false, refreshTicket: null, statusTicket: null,
+    authEpoch: state.authEpoch + 1, dataEpoch: state.dataEpoch + 1,
+  });
   if ($("#editor")?.open) $("#editor").close();
+  $("#serverForm").reset();
+  for (const selector of ["#token", "#accessTokenValue", "#newAccessToken", "#serverJSON"]) $(selector).value = "";
+  for (const selector of ["#servers", "#calls", "#accessTokenSelect", "#httpAuthorization", "#stdioCommand", "#argRows", "#envRows", "#headerRows"]) $(selector).replaceChildren();
+  $("#loginButton").disabled = false;
+  $("#loginButton").textContent = "进入管理台";
+  $("#token").type = "password";
+  $("#accessTokenValue").type = "password";
+  $("#togglePassword").textContent = "显示";
+  $("#toggleAccessToken").textContent = "显示";
   $("#login").classList.remove("hidden");
   $("#app").classList.add("hidden");
   $("#topActions").classList.add("hidden");
@@ -102,13 +128,14 @@ function setConnectionState(connected) {
 }
 
 async function boot() {
+  const epoch = state.authEpoch;
   try {
     const session = await api("/auth/me");
     state.csrf = session.csrfToken;
-    showApp();
     await refreshAll();
+    if (epoch === state.authEpoch) showApp();
   } catch {
-    showLogin();
+    if (epoch === state.authEpoch) showLogin();
   }
 }
 
@@ -120,15 +147,26 @@ function selectedToken() {
 async function refreshAll({ announce = false } = {}) {
   if (state.refreshing) return;
   state.refreshing = true;
+  const ticket = {};
+  state.refreshTicket = ticket;
+  const epoch = state.authEpoch;
+  state.dataEpoch++;
   const previousToken = selectedToken()?.token || "";
   try {
-    const [config, status, tokens] = await Promise.all([
-      api("/config", {}, { withMeta: true }),
-      api("/status"),
-      api("/tokens", {}, { withMeta: true }),
-    ]);
+    let snapshot;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      snapshot = await Promise.all([
+        api("/config", {}, { withMeta: true }), api("/status"),
+        api("/tokens", {}, { withMeta: true }),
+      ]);
+      if (snapshot[0].etag && snapshot[0].etag === snapshot[2].etag) break;
+      snapshot = null;
+    }
+    if (!snapshot) throw new Error("配置正在更新，请稍后刷新。未使用版本不一致的服务与 Token 数据。");
+    if (epoch !== state.authEpoch) return;
+    const [config, status, tokens] = snapshot;
     state.config = config.data;
-    state.etag = config.etag || tokens.etag;
+    state.etag = config.etag;
     state.status = status;
     state.tokens = tokens.data?.tokens || [];
     if (state.selectNewestToken && state.tokens.length) {
@@ -144,23 +182,30 @@ async function refreshAll({ announce = false } = {}) {
     setConnectionState(true);
     if (announce) toast("状态已刷新");
   } catch (error) {
-    setConnectionState(false);
-    if (announce) toast(error.message, "error");
+    if (epoch === state.authEpoch && !error.staleSession) {
+      setConnectionState(false);
+      if (announce) toast(error.message, "error");
+    }
     throw error;
   } finally {
-    state.refreshing = false;
+    if (state.refreshTicket === ticket) { state.refreshing = false; state.refreshTicket = null; }
   }
 }
 
 async function refreshStatus() {
-  if (state.refreshing || $("#app").classList.contains("hidden")) return;
+  if (state.refreshing || state.statusTicket || $("#app").classList.contains("hidden")) return;
+  const ticket = {}, epoch = state.authEpoch, dataEpoch = state.dataEpoch;
+  state.statusTicket = ticket;
   try {
     const status = await api("/status");
+    if (epoch !== state.authEpoch || dataEpoch !== state.dataEpoch) return;
     state.status = status;
     render(status);
     setConnectionState(true);
   } catch {
-    setConnectionState(false);
+    if (epoch === state.authEpoch) setConnectionState(false);
+  } finally {
+    if (state.statusTicket === ticket) state.statusTicket = null;
   }
 }
 
@@ -316,12 +361,14 @@ function renderClientAccess() {
   $("#accessTokenValue").value = token;
   $("#accessTokenValue").placeholder = token ? "" : "还没有可用 MCP Token";
   $("#copyAccessToken").disabled = !token;
-  $("#deleteAccessToken").disabled = !token;
+  $("#deleteAccessToken").disabled = !token || state.tokens.length <= 1;
+  $("#deleteAccessToken").title = state.tokens.length === 1 ? "请先新增替代 Token，再删除最后一枚 Token，避免意外关闭认证" : "撤销当前 Token";
   $("#copyClientPrompt").disabled = !token;
-  $("#httpAuthorization").textContent = token ? `Authorization: Bearer ${token}` : "请先新增或选择 MCP Token";
-  $("#stdioCommand").textContent = token
-    ? `mcp-manager stdio --connect ${endpoint} --token ${token}`
-    : `mcp-manager stdio --connect ${endpoint} --token <MCP_BEARER_TOKEN>`;
+  $("#mcpAuthWarning")?.classList.toggle("hidden", state.tokens.length > 0);
+  const revealed = $("#accessTokenValue").type === "text";
+  $("#httpAuthorization").textContent = token ? `Authorization: Bearer ${revealed ? token : "[已隐藏]"}` : "请先新增或选择 MCP Token";
+  // Pass the credential using MCP_MANAGER_TOKEN, not a visible argv value.
+  $("#stdioCommand").textContent = `mcp-manager stdio --connect ${endpoint}`;
 }
 
 function openEditor(id = null, source = null) {
@@ -529,17 +576,22 @@ async function deleteServer(id) {
 
 $("#loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const token = $("#token").value;
+  showLogin();
+  const epoch = state.authEpoch;
   $("#loginError").textContent = "";
   const button = $("#loginButton");
   button.disabled = true; button.textContent = "登录中…";
   try {
-    const session = await api("/auth/login", { method: "POST", body: JSON.stringify({ token: $("#token").value }) });
+    const session = await api("/auth/login", { method: "POST", body: JSON.stringify({ token }) });
     state.csrf = session.csrfToken;
-    $("#token").value = "";
-    showApp();
     await refreshAll();
-  } catch (error) { $("#loginError").textContent = error.message; }
-  finally { button.disabled = false; button.textContent = "进入管理台"; }
+    if (epoch === state.authEpoch) showApp();
+  } catch (error) {
+    if (!error.staleSession) $("#loginError").textContent = error.message;
+  } finally {
+    if (epoch === state.authEpoch) { button.disabled = false; button.textContent = "进入管理台"; }
+  }
 });
 
 $("#togglePassword").addEventListener("click", () => {
@@ -590,7 +642,7 @@ $("#serverForm").addEventListener("submit", async (event) => {
     const id = $("#serverId").value.trim();
     const server = state.editorMode === "json" ? JSON.parse($("#serverJSON").value) : collectForm();
     validateServer(id, server);
-    if (!state.editingId && state.config?.mcpServers?.[id]) throw new Error("这个服务 ID 已存在；请换一个 ID，或从服务列表进入编辑");
+    if (!state.editingId && Object.hasOwn(state.config?.mcpServers || {}, id)) throw new Error("这个服务 ID 已存在；请换一个 ID，或从服务列表进入编辑");
     save.disabled = true; save.textContent = "保存中…";
     await api(`/servers/${encodeURIComponent(id)}`, { method: "PUT", headers: { "If-Match": state.editorEtag }, body: JSON.stringify(server) });
     $("#editor").close();
@@ -635,6 +687,7 @@ $("#toggleAccessToken").addEventListener("click", () => {
   const input = $("#accessTokenValue");
   input.type = input.type === "password" ? "text" : "password";
   $("#toggleAccessToken").textContent = input.type === "password" ? "显示" : "隐藏";
+  renderClientAccess();
 });
 
 $("#copyAccessToken").addEventListener("click", async () => {
@@ -686,21 +739,26 @@ for (const button of $$(".nav-item")) {
 for (const button of $$(".copy-button")) {
   button.addEventListener("click", async () => {
     const target = $(`#${button.dataset.copyTarget}`);
-    const text = target && "value" in target ? target.value : target?.textContent || "";
+    const text = button.dataset.copyTarget === "httpAuthorization"
+      ? (selectedToken()?.token ? `Authorization: Bearer ${selectedToken().token}` : "")
+      : target && "value" in target ? target.value : target?.textContent || "";
+    if (!text) return toast("暂无可复制的内容", "error");
     try { await navigator.clipboard.writeText(text); toast("已复制到剪贴板"); }
     catch { toast("浏览器未允许复制，请手动复制", "error"); }
   });
 }
 
 $("#copyClientPrompt").addEventListener("click", async () => {
+  const epoch = state.authEpoch;
   const token = selectedToken()?.token;
   if (!token) return toast("请先选择一个 MCP Token", "error");
   const endpoint = `${location.origin}/mcp`;
   try {
-    const response = await fetch("/api/admin/v1/client-prompt", { credentials: "same-origin" });
+    const response = await fetch("/api/admin/v1/client-prompt", { credentials: "same-origin", signal: AbortSignal.timeout(15000) });
     if (response.status === 401) { showLogin(); throw new Error("登录已失效，请重新登录"); }
     if (!response.ok) throw new Error("客户端 Agent Prompt 暂时不可用");
     const template = await response.text();
+    if (epoch !== state.authEpoch) return;
     const prompt = template.split("{{MCP_ENDPOINT}}").join(endpoint).split("{{MCP_TOKEN}}").join(token);
     await navigator.clipboard.writeText(prompt);
     toast("客户端 Agent Prompt 已复制");
@@ -709,5 +767,17 @@ $("#copyClientPrompt").addEventListener("click", async () => {
 
 window.setInterval(() => { if (!document.hidden && !$("#editor").open) void refreshStatus(); }, 10_000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) void refreshStatus(); });
+
+$("#localTokenHint")?.classList.toggle("hidden", !["127.0.0.1", "localhost", "[::1]"].includes(location.hostname));
+$("#pasteAdminToken")?.addEventListener("click", async () => {
+  const epoch = state.authEpoch;
+  try {
+    const value = await navigator.clipboard.readText();
+    if (epoch !== state.authEpoch || $("#login").classList.contains("hidden")) return;
+    $("#token").value = value;
+    $("#token").focus();
+    $("#loginError").textContent = "";
+  } catch { $("#loginError").textContent = "浏览器未允许读取剪贴板，请点击密钥输入框后按 Ctrl+V 粘贴。"; }
+});
 
 void boot();

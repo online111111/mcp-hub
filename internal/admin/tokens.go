@@ -122,6 +122,10 @@ func (h *Handler) deleteToken(w http.ResponseWriter, r *http.Request, index int)
 			http.Error(w, "MCP token not found", http.StatusNotFound)
 			return
 		}
+		if total == 1 {
+			http.Error(w, "cannot remove the final MCP token; add a replacement before deleting this token", http.StatusBadRequest)
+			return
+		}
 		if legacyCount == 1 && index == 0 {
 			cfg.Hub.Auth.BearerToken = ""
 		} else {

@@ -7,7 +7,8 @@ MCP Manager is a trusted personal gateway, not a sandbox or multi-tenant securit
 - Local mode is loopback-only.
 - Public mode is explicit and must satisfy HTTPS, Host, proxy, and authentication policy before startup.
 - MCP/diagnostic endpoints validate `Host` and reject browser `Origin` requests; Browser Admin has its own strict same-origin + CSRF policy.
-- Public MCP/diagnostic requests require the MCP bearer token.
+- Configured MCP tokens protect MCP/diagnostic requests in both local and public mode. Public mode requires tokens; token-free local mode is explicitly unauthenticated. `/healthz` is the intentional non-secret liveness exception.
+- Admin refuses deletion of the final MCP token. Rotate by adding a replacement first; disabling local authentication requires an explicit offline configuration change.
 - Request/response/session resources are bounded.
 
 For public hosting keep MCP Manager on loopback and terminate TLS at a trusted local proxy. Never place an untrusted public network in `trustedProxies`.
@@ -77,4 +78,4 @@ Routing uses explicit public-name -> server/original-name mappings. Calls are ne
 - Only trusted stdio commands and remote MCP endpoints are configured.
 - Upgrades run validate, status, doctor, and rollback on failure.
 
-See [VPS.md](VPS.md) and [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md) for operational/evidence boundaries.
+See [VPS.md](VPS.md) and [production runbook](PRODUCTION.md) for operational/evidence boundaries.

@@ -222,3 +222,8 @@ mcp-manager-0.4.0-linux-amd64.tar.gz
 ## 安全边界
 
 MCP Manager 是可信个人网关，**不是沙箱**。stdio 下游会以 Manager 服务用户的权限运行。建议使用专用非 root 用户，并且只配置你信任的 MCP 服务。
+
+
+## Production operation / 长期运行
+
+See [the production runbook](docs/PRODUCTION.md) for upgrade, monitoring, credential, resource-limit and rollback requirements. MCP Manager is a trusted single-operator gateway, not a multi-tenant sandbox. A successful smoke test is not a long-duration soak certification.

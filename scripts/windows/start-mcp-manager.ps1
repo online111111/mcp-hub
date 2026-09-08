@@ -4,127 +4,121 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-Set-Location $PSScriptRoot
-
+Set-Location -LiteralPath $PSScriptRoot
 $exe = Join-Path $PSScriptRoot 'mcp-manager.exe'
 $config = Join-Path $PSScriptRoot 'config.json'
+$process = $null
 
-function Write-Utf8NoBom {
-    param(
-        [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$Content
-    )
-    $encoding = New-Object System.Text.UTF8Encoding($false)
-    [System.IO.File]::WriteAllText($Path, $Content, $encoding)
-}
-
-function Try-CopyAdminToken {
-    param([Parameter(Mandatory = $true)][string]$Token)
+function Write-NewUtf8Config {
+    param([string]$Path, [string]$Content)
+    # Never overwrite a config created by another launcher in the meantime.
+    $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
     try {
-        Set-Clipboard -Value $Token
-        Write-Host 'Admin Token copied to the Windows clipboard. Paste it into the Admin login page.'
-        return $true
-    } catch {
-        Write-Warning 'Could not access the Windows clipboard. Run copy-admin-token.cmd later, or read hub.admin.token from config.json.'
-        return $false
-    }
+        $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($Content)
+        $stream.Write($bytes, 0, $bytes.Length)
+        $stream.Flush($true)
+    } finally { $stream.Dispose() }
 }
-
-if (-not (Test-Path $exe)) {
-    throw 'mcp-manager.exe was not found next to the launcher.'
-}
-
-$createdConfig = $false
-if (-not (Test-Path $config)) {
-    Write-Host 'First run: creating a local-only MCP Manager configuration...'
-    $token = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
-    $cfg = [ordered]@{
-        version = 1
-        hub = [ordered]@{
-            listen = '127.0.0.1:8080'
-            admin = [ordered]@{
-                enabled = $true
-                token = $token
-                sessionTimeout = '30m'
-            }
-        }
-        defaults = [ordered]@{
-            startupTimeout = '20s'
-            callTimeout = '60s'
-            maxConcurrency = 8
-        }
-        mcpServers = [ordered]@{}
-    }
-    Write-Utf8NoBom -Path $config -Content ($cfg | ConvertTo-Json -Depth 8)
-    $createdConfig = $true
-    Write-Host 'Created config.json with a random local Admin token (UTF-8 without BOM).'
-    [void](Try-CopyAdminToken -Token $token)
-} else {
-    $bytes = [System.IO.File]::ReadAllBytes($config)
-    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
-        $text = [System.Text.Encoding]::UTF8.GetString($bytes, 3, $bytes.Length - 3)
-        Write-Utf8NoBom -Path $config -Content $text
-        Write-Host 'Normalized existing config.json from UTF-8 BOM to UTF-8 without BOM.'
-    }
-}
-
-& $exe validate --config $config
-if ($LASTEXITCODE -ne 0) {
-    throw "Configuration validation failed with exit code $LASTEXITCODE."
-}
-
-Write-Host 'Starting MCP Manager...'
-$quotedConfig = '"' + $config + '"'
-$process = Start-Process -FilePath $exe -ArgumentList @('serve', '--config', $quotedConfig) -PassThru -NoNewWindow
 
 try {
-    $ready = $false
-    for ($i = 0; $i -lt 100; $i++) {
-        if ($process.HasExited) {
-            throw "MCP Manager exited during startup with code $($process.ExitCode)."
-        }
-        try {
-            $response = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8080/readyz' -TimeoutSec 1
-            if ($response.StatusCode -eq 200) {
-                $ready = $true
-                break
+    if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+        throw 'mcp-manager.exe was not found next to the launcher.'
+    }
+
+    $createdConfig = $false
+    $copiedToken = $false
+    if (-not (Test-Path -LiteralPath $config)) {
+        Write-Host 'First run: creating a local-only MCP Manager configuration...'
+        $token = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
+        $cfg = [ordered]@{
+            version = 1
+            hub = [ordered]@{
+                listen = '127.0.0.1:8080'
+                admin = [ordered]@{ enabled = $true; token = $token; sessionTimeout = '30m' }
             }
+            defaults = [ordered]@{ startupTimeout = '20s'; callTimeout = '60s'; maxConcurrency = 8 }
+            mcpServers = [ordered]@{}
+        }
+        Write-NewUtf8Config -Path $config -Content ($cfg | ConvertTo-Json -Depth 8)
+        $createdConfig = $true
+        Write-Host 'Created config.json with a random Admin token (UTF-8 without BOM).'
+        try {
+            Set-Clipboard -Value $token
+            $copiedToken = $true
+        } catch {
+            Write-Warning 'Clipboard unavailable. Use copy-admin-token.cmd later or read hub.admin.token from config.json.'
+        }
+        $token = $null
+    }
+
+    # The binary supports an existing UTF-8 BOM. Do not rewrite user config just
+    # to normalize its encoding: another running instance may be updating it.
+    & $exe validate --config $config
+    if ($LASTEXITCODE -ne 0) { throw "Configuration validation failed with exit code $LASTEXITCODE." }
+    $settings = [System.IO.File]::ReadAllText($config, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
+    $listen = [string]$settings.hub.listen
+    if ([string]::IsNullOrWhiteSpace($listen)) { $listen = '127.0.0.1:8080' }
+    $endpoint = [uri]('http://' + $listen)
+    if (-not $endpoint.IsLoopback -or $endpoint.Port -lt 1 -or $settings.hub.publicMode) {
+        throw 'This launcher is for local loopback use. For a public/server deployment, run mcp-manager.exe serve --config config.json from a terminal.'
+    }
+    if (-not $settings.hub.admin.enabled) {
+        throw 'The desktop launcher requires hub.admin.enabled=true. Use the serve command for a headless instance.'
+    }
+    $baseUrl = $endpoint.GetLeftPart([System.UriPartial]::Authority)
+    $adminUrl = $baseUrl + '/admin/'
+
+    Write-Host ('Starting MCP Manager on ' + $baseUrl + ' ...')
+    $quotedConfig = '"' + $config + '"'
+    $process = Start-Process -FilePath $exe -ArgumentList @('serve', '--config', $quotedConfig) -PassThru -NoNewWindow
+    # Retain the process handle so ExitCode remains available after termination.
+    $null = $process.Handle
+    $timer = [System.Diagnostics.Stopwatch]::StartNew()
+    $healthy = $false
+    while ($timer.Elapsed.TotalSeconds -lt 30) {
+        $process.Refresh()
+        if ($process.HasExited) { throw "MCP Manager exited during startup with code $($process.ExitCode)." }
+        try {
+            # Liveness is intentionally independent of MCP bearer auth and
+            # downstream availability. The Admin UI must stay usable to repair
+            # an unavailable downstream or an existing authenticated config.
+            $response = Invoke-WebRequest -UseBasicParsing ($baseUrl + '/healthz') -TimeoutSec 1 -MaximumRedirection 0
+            if ($response.StatusCode -eq 200) { $healthy = $true; break }
         } catch {}
         Start-Sleep -Milliseconds 100
     }
+    if (-not $healthy) { throw 'MCP Manager did not start its local HTTP service within 30 seconds.' }
+    Start-Sleep -Milliseconds 200
+    $process.Refresh()
+    if ($process.HasExited) { throw 'MCP Manager exited after startup; check for an occupied port or invalid configuration.' }
+    $admin = Invoke-WebRequest -UseBasicParsing $adminUrl -TimeoutSec 3 -MaximumRedirection 0
+    if ($admin.StatusCode -ne 200) { throw 'The Admin UI did not return HTTP 200.' }
 
-    if (-not $ready) {
-        throw 'MCP Manager did not become ready within 10 seconds.'
+    if ($copiedToken) {
+        Write-Host 'Admin Token copied to the Windows clipboard. Paste it into the Admin login page.'
+    } else {
+        Write-Host 'To copy the existing Admin Token, double-click copy-admin-token.cmd.'
     }
-
-    $admin = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8080/admin/' -TimeoutSec 2
-    if ($admin.StatusCode -ne 200) {
-        throw "Admin UI returned HTTP $($admin.StatusCode)."
-    }
-
+    Write-Host 'Keep config.json private. Clipboard history or other local applications may retain copied secrets.'
+    Write-Host ('Admin UI: ' + $adminUrl)
     if ($ExitAfterReady) {
-        Write-Host 'Windows launcher smoke test passed.'
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        $process.WaitForExit()
+        Write-Host 'Windows launcher smoke test passed.'
         exit 0
     }
-
-    if ($createdConfig) {
-        Write-Host 'First-run Admin Token is in your clipboard. If needed later, double-click copy-admin-token.cmd.'
-    }
-
     if (-not $NoBrowser) {
-        Write-Host 'Opening Admin UI: http://127.0.0.1:8080/admin/'
-        Start-Process 'http://127.0.0.1:8080/admin/'
-    } else {
-        Write-Host 'Admin UI: http://127.0.0.1:8080/admin/'
+        try { Start-Process $adminUrl }
+        catch { Write-Warning ('Could not open a browser. Open ' + $adminUrl + ' manually; the service remains running.') }
     }
-
-    Wait-Process -Id $process.Id
+    $process.WaitForExit()
     exit $process.ExitCode
 } catch {
-    if (-not $process.HasExited) {
-        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-    }
-    Write-Error $_
+    Write-Error $_ -ErrorAction Continue
     exit 1
+} finally {
+    if ($null -ne $process) {
+        if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+        $process.Dispose()
+    }
 }

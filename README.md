@@ -218,3 +218,8 @@ Assets use names such as `mcp-manager-0.4.0-linux-amd64.tar.gz`.
 ## Security boundary
 
 MCP Manager is a trusted personal gateway, **not a sandbox**. stdio downstreams execute with the Manager service user's privileges. Run it as a dedicated non-root account and configure only MCP services you trust.
+
+
+## Production operation / 长期运行
+
+See [the production runbook](docs/PRODUCTION.md) for upgrade, monitoring, credential, resource-limit and rollback requirements. MCP Manager is a trusted single-operator gateway, not a multi-tenant sandbox. A successful smoke test is not a long-duration soak certification.

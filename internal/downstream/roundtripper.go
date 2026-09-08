@@ -2,7 +2,10 @@ package downstream
 
 import (
 	"fmt"
+	"mime"
 	"net/http"
+
+	"github.com/online111111/mcp-manager/internal/wirelimit"
 	"strings"
 )
 
@@ -52,7 +55,19 @@ func (rt *HeaderInjectingRoundTripper) RoundTrip(req *http.Request) (*http.Respo
 	if base == nil {
 		base = http.DefaultTransport
 	}
-	return base.RoundTrip(req2)
+	resp, err := base.RoundTrip(req2)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Body != nil {
+		framing := wirelimit.WholeBody
+		mediaType, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 && mediaType == "text/event-stream" {
+			framing = wirelimit.SSEEvents
+		}
+		resp.Body = wirelimit.New(resp.Body, framing)
+	}
+	return resp, nil
 }
 
 // newHTTPClient creates an *http.Client configured for downstream Streamable HTTP:

@@ -48,3 +48,16 @@ test("filterCalls searches and groups every non-success outcome as an error", ()
   assert.deepEqual(filterCalls(calls, "two", "all"), [calls[1]]);
   assert.deepEqual(filterCalls(calls, "", "error"), [calls[1]]);
 });
+
+
+test("key collection preserves prototype-like names as ordinary own properties", () => {
+  const result = collectKeyValues([{ key: "__proto__", value: "literal" }, { key: "constructor", value: "value" }]);
+  assert.equal(Object.getPrototypeOf(result), Object.prototype);
+  assert.equal(Object.hasOwn(result, "__proto__"), true);
+  assert.equal(result.__proto__, "literal");
+  assert.equal(JSON.parse(JSON.stringify(result)).__proto__, "literal");
+});
+
+test("key collection rejects case-folded duplicates consistently with config validation", () => {
+  assert.throws(() => collectKeyValues([{key:"Authorization",value:"one"},{key:"authorization",value:"two"}]), /重复/);
+});

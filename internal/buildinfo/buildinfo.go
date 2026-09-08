@@ -6,7 +6,7 @@ package buildinfo
 const Name = "mcp-manager"
 
 var (
-	Version   = "0.4.4"
+	Version   = "0.4.5"
 	Commit    = "unknown"
 	BuildDate = "unknown"
 )
