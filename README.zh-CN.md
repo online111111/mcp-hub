@@ -44,6 +44,8 @@ http://127.0.0.1:8080/mcp
 ./mcp-manager doctor --endpoint http://127.0.0.1:8080
 ```
 
+需要接手代码、审查或部署项目的 Agent，优先从根目录 [`AGENTS.md`](AGENTS.md) 开始读取。
+
 ## 环境变量
 
 新安装统一使用：
@@ -139,7 +141,7 @@ v0.4 的迁移不要求一次性替换所有兼容标识：
 
 旧源码入口已经移除；正式 v0.4 Release 只发布名为 `mcp-manager` 的二进制。
 
-Go module path 已与新仓库统一为 `github.com/online111111/mcp-manager`，内部 import 也全部使用这一规范路径。
+Go module path 已与仓库统一为 `github.com/online111111/mcp-manager`。
 
 ## 开发与验证
 
@@ -152,7 +154,7 @@ node --test internal/admin/webtest/*.test.mjs
 go build -trimpath -o dist/mcp-manager ./cmd/mcp-manager
 ```
 
-CI 覆盖 Linux、Windows、macOS 的兼容/当前 Go 矩阵；当前 Go 还跑 race 与独立 SDK probe，Linux 额外运行 Chromium 回归和真实 MCP Manager 浏览器 smoke，并设有 `govulncheck` 与仓库身份检查，阻止旧产品名和旧仓库路径重新进入当前代码树。
+CI 覆盖 Linux、Windows、macOS 的兼容/当前 Go 矩阵；当前 Go 还跑 race 与独立 SDK probe，Linux 额外运行 Chromium 回归和真实 MCP Manager 浏览器 smoke，并设有 `govulncheck` 与仓库身份检查。
 
 ## Release 包
 
@@ -177,8 +179,6 @@ mcp-manager-0.4.0-linux-amd64.tar.gz
 - [兼容性](docs/COMPATIBILITY.md)
 - [Remote Admin](docs/REMOTE-ADMIN.md)
 - [VPS 部署](docs/VPS.md)
-- [实现状态](docs/IMPLEMENTATION-STATUS.md)
-- [管理台验证](docs/CONSOLE-POLISH.md)
 
 ## 安全边界
 
