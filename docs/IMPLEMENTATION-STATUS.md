@@ -1,63 +1,92 @@
 # MCP Hub implementation status
 
-Last updated: 2026-09-07 for the v0.4.0 release candidate.
+Last updated: 2026-09-08 for the v0.4.0 release candidate.
 
-Status values are `PASS`, `PARTIAL`, and `NOT_RUN`. `PASS` means the stated contract has direct automated or platform evidence; it is not a claim of compatibility with every third-party MCP server or GUI client.
+Status values are `PASS`, `PARTIAL`, and `NOT_RUN`.
+
+- `PASS` means the stated contract has direct automated/platform evidence.
+- `PARTIAL` means the implementation exists but the listed verification boundary is incomplete.
+- `NOT_RUN` means no exact acceptance evidence has been recorded.
+
+A `PASS` row is not a claim of compatibility with every third-party MCP server, client, proxy, or operating-system release.
 
 ## Current implementation
 
 | Area | Status | Evidence / notes |
 |---|---|---|
-| Strict configuration | PASS | strict case-sensitive decoding, duplicate/unknown/trailing input rejection, 1 MiB bounded reads/digests, validation, one-pass environment expansion, path resolution, CAS, durable atomic writes, and OS-backed cross-process locking |
-| Shared configuration loading | PASS | CLI, runtime reload, and Admin use the shared strict loader; oversized/special-file reads are bounded |
-| Downstream transports | PASS | stdio and Streamable HTTP, MCP Go SDK v1.7.0, pagination, cancellation, response/body policies, legacy discovery compatibility, redirect/header restrictions, and remote HTTPS enforcement |
-| stdio environment boundary | PASS | child processes inherit a compatibility allowlist rather than the Hub environment wholesale; server `env` is explicit opt-in and Hub auth values remain filtered |
-| Process ownership | PASS | POSIX process groups and Windows Job Objects; cancellation/close kills descendants, including the POSIX root-exits-first case |
-| Catalog and publication | PASS | deterministic public names, schema/name validation before SDK publication, filtering, immutable snapshots, accurate unpublished counts, and revision-gated publication |
-| Manager and router | PASS | generations, leases, concurrency, backoff, revision linearization, superseded-operation cancellation, no-replay calls, sanitized diagnostics, and graceful drain ordering |
-| Live runtime controller | PASS | file polling/Admin share one transaction domain; stale snapshots are rejected; startup-bound changes report restart required without silently revoking live credentials |
-| Inbound HTTP | PASS | Host/Origin policy, public bearer auth, body/session caps, init and existing-session POST read deadlines, stateful protocol negotiation, and sanitized diagnostics |
-| stdio bridge | PASS | authenticated forwarding, dynamic tool synchronization, normal-disconnect classification, failure exit, stdout purity, and safe Hub endpoint policy |
-| Admin API | PASS | same-origin auth, bounded sessions/rates, CSRF, strict JSON, secret placeholders, ETag/CAS, isolated downstream preflight before persistence, rollback/restoration, and security headers |
-| Admin browser UI | PASS | JavaScript unit tests, Chromium regressions with stubbed API, and integrated Chromium smoke against a real local Hub on Linux CI |
-| CLI diagnostics | PASS | `status`, `doctor`, and `stdio` support auth; endpoint policy, redirect blocking, response caps, output sanitization, and centralized v0.4.0 version identity are implemented |
-| CI / vulnerability gate | PASS | matrix covers Linux, Windows, and macOS at compatibility/current Go; current-Go race and SDK probe jobs plus `govulncheck`; Actions are pinned |
-| Release packaging | PARTIAL | tag workflow is implemented to verify version, test/vet/probe, cross-build six OS/arch targets, inject build metadata, archive artifacts, generate SHA256SUMS, and publish a verified-tag GitHub release; the tag-triggered workflow remains NOT_RUN until an actual release tag is authorized |
-| Repository maintenance | PASS | CODEOWNERS and weekly Dependabot coverage for both Go modules and GitHub Actions |
+| Strict configuration | PASS | strict case-sensitive decoding, duplicate/unknown/trailing rejection, 1 MiB bounded reads/digests, validation, one-pass env expansion, path resolution, CAS, durable atomic writes, OS-backed cross-process locking |
+| Shared configuration loading | PASS | CLI, runtime reload, Browser Admin, and Remote Admin use the shared strict loader/transaction model |
+| Downstream stdio | PASS | direct command/args execution, safe compatibility env allowlist, explicit secret forwarding, startup/call limits, cancellation, POSIX process groups, Windows Job Objects |
+| Downstream Streamable HTTP | PASS | SDK v1.7.0, remote HTTPS enforcement, redirect rejection, header restrictions, response/body policy, session/cancellation behavior, compatibility discovery paths |
+| Protocol boundary | PARTIAL | current tested stateful/session-oriented compatibility model is documented; full native coverage of every MCP 2026-07-28 capability is intentionally not claimed |
+| Catalog and publication | PASS | deterministic public names, schema/name validation, filtering, dynamic publication, revision-gated updates, unpublished counts |
+| Manager and router | PASS | generations, leases, concurrency, backoff, superseded-operation cancellation, no-replay calls, sanitized diagnostics, graceful drain |
+| Live runtime controller | PASS | file polling/Admin share one transaction domain; stale snapshots rejected; last healthy runtime retained; startup-bound changes set restart-required |
+| Inbound HTTP | PASS | Host/Origin policy, public bearer auth, body/session caps, init and established-session read deadlines, stateful negotiation, sanitized diagnostics |
+| stdio bridge | PASS | authenticated forwarding, dynamic tool sync, failure/normal disconnect classification, stdout purity, safe endpoint policy |
+| Browser Admin API | PASS | same-origin auth, bounded sessions/rates, CSRF, strict JSON, secret placeholders, ETag/CAS, preflight, rollback/restoration, security headers |
+| Browser Admin UI | PASS | helper tests, Chromium interaction/design regressions, responsive/accessibility checks, integrated Chromium smoke against a real local Hub |
+| Remote Admin CLI | PASS | `list/get/add/edit/delete`, Admin session + CSRF, redacted reads, ETag/CAS, HTTPS endpoint policy, redirect blocking, explicit delete confirmation, bounded server JSON |
+| CLI diagnostics | PASS | `status`, `doctor`, `stdio`, and remote Admin auth/endpoint policy; response caps and sanitized errors |
+| Agent deployment assets | PASS | embedded `mcp-hub-deployer` Skill, authenticated ZIP delivery, copyable Agent Prompt, deployment/upgrade/recovery guidance |
+| CI / vulnerability gate | PASS | Linux/Windows/macOS × Go 1.25.8/1.27.1; current-Go race + SDK probe; Linux Chromium + real-Hub smoke; `govulncheck`; pinned Actions |
+| Release packaging | PARTIAL | tag workflow verifies source version, tests/vets/probes, cross-builds six OS/arch archives, injects build metadata, generates SHA256SUMS, and publishes GitHub Release; no formal tag/release has been created yet |
+| Repository maintenance | PASS | CODEOWNERS and weekly Dependabot coverage for root Go, sdkprobe Go, and GitHub Actions |
+| Branch protection / ruleset | PARTIAL | repository currently has no enforced main protection/ruleset; this is a governance risk, not a runtime code blocker |
+| License | PARTIAL | public repository currently has no selected LICENSE; owner/legal choice remains pending |
 
-## v0.4.0 release-candidate hardening
+## Current dependency and version baseline
 
-The v0.4.0 candidate includes the earlier v0.3.1-v0.3.4 audit fixes and closes the major deferred engineering items from those reviews:
+- product identity: `0.4.0` source default;
+- production Go directive: `1.25.0`;
+- CI compatibility/current toolchains: Go `1.25.8` and `1.27.1`;
+- production MCP Go SDK: `v1.7.0`;
+- independent SDK probe MCP Go SDK: `v1.7.0`;
+- production `golang.org/x/sys`: currently `v0.44.0` on `main`;
+- open Dependabot PR #10 proposes `x/sys v0.47.0` but is based on an old main and must be rebased/recreated and revalidated before merge.
 
-- upgraded the root module and independent SDK probe to MCP Go SDK v1.7.0, including current/legacy protocol and transport behavior;
+## v0.4.0 hardening delivered
+
+The candidate includes the v0.3.1-v0.3.4 audit work plus subsequent release/admin/CLI improvements:
+
+- upgraded root and SDK probe to MCP Go SDK v1.7.0;
+- retained a documented compatibility boundary instead of claiming unverified current-protocol feature coverage;
 - replaced broad stdio environment inheritance with a least-privilege compatibility allowlist;
-- replaced crash-stale lock-file ownership with OS-backed advisory locking while retaining a stable sibling lock path;
-- preflights new/connection-changed Admin downstreams and validates their discovered tools before persistence;
-- bounds configuration reads and digest computation and strengthens atomic-write durability;
-- cleans POSIX descendants even when the direct child exits before its process group;
-- requires public/Admin authentication tokens to be at least 32 characters and distinct;
-- centralizes runtime/build version identity at v0.4.0 and supports release-time commit/build-date injection;
-- applies a bounded read deadline to existing-session MCP POST requests without affecting SSE GET streams;
-- expands CI to Linux, Windows, and macOS, adds compatibility/current Go coverage, race/SDK/browser checks, vulnerability scanning, pinned Actions, release packaging, Dependabot, and CODEOWNERS.
+- protects Hub auth secrets from implicit stdio inheritance;
+- uses OS-backed config locking and durable atomic writes;
+- preflights new/connection-changing Admin downstreams before persistence;
+- validates discovered tools before publication;
+- cleans POSIX process groups and Windows Job-owned trees;
+- requires strong, distinct public/Admin authentication credentials in public mode;
+- centralizes build/version identity and release-time metadata injection;
+- bounds existing-session POST reads without applying an incorrect short timeout to SSE lifetime;
+- provides Browser Admin and Remote Admin CLI through one management transaction model;
+- snapshots editor ETag at open time and publishes config+revision together after successful refresh;
+- reads slow Admin PUT bodies before taking the shared config transaction lock;
+- embeds Agent deployment assets into the single binary;
+- expands CI to cross-platform dual-Go coverage, race, SDK probe, browser regressions, real-Hub smoke, and govulncheck.
 
-## Admin console polish and reliability
+## Admin management evidence
 
-The console now uses dark workspace navigation and a light working area, with
-responsive layouts, accessible filter/dialog names, keyboard focus and reduced-motion
-support. Narrow screens retain every call-table column using local horizontal scrolling.
+The management plane has three intended clients:
 
-Configuration uploads are decoded before entering the shared transaction lock;
-config reads, CAS validation, persistence and reload remain inside it. Browser editors
-pin the revision at open time, and complete refreshes publish configuration content
-and its ETag together so partial failures cannot authorize stale drafts. Refresh and
-logout failures are handled explicitly, including unconfirmed server-side logout.
+1. Browser Admin `/admin/`;
+2. `mcp-hub admin` Remote Admin CLI;
+3. trusted Agent automation using the same CLI/Admin semantics.
 
-Evidence: 19 Chromium interaction/design regressions, four helper tests, the real-Hub
-Chromium smoke test, Go test/race/vet and the independent SDK probe. The console
-implementation commit passed all six OS/Go CI jobs and the vulnerability scan.
-See [console polish verification](CONSOLE-POLISH.md) for commands and boundaries.
-The project introduction is available in [English](../README.md) and
-[Simplified Chinese](../README.zh-CN.md).
+Mutations preserve:
+
+- authenticated Admin session;
+- CSRF token;
+- strict JSON;
+- ETag/CAS;
+- downstream preflight for connection-changing edits;
+- shared config transaction/OS lock;
+- atomic persistence;
+- runtime reload;
+- rollback/last-healthy-state behavior.
+
+See [REMOTE-ADMIN.md](REMOTE-ADMIN.md), [SECURITY.md](SECURITY.md), and [CONSOLE-POLISH.md](CONSOLE-POLISH.md).
 
 ## Verification commands
 
@@ -72,38 +101,85 @@ node --check internal/admin/web/app.js
 node --test internal/admin/webtest/*.test.mjs
 ```
 
-Independent SDK probe:
+SDK probe:
 
 ```bash
 cd verification/sdkprobe
 go test -race -count=1 -timeout 120s ./...
 ```
 
-GitHub Actions additionally exercise the OS/Go matrix, Chromium browser regressions, an integrated browser smoke test against a real local Hub, and `govulncheck`.
+Browser regressions:
+
+```bash
+cd internal/admin/browsertest
+npm ci
+npx playwright install --with-deps chromium
+npm test
+```
+
+Real-Hub Chromium smoke from repository root:
+
+```bash
+go build -trimpath -o dist/mcp-hub ./cmd/mcp-hub
+node internal/admin/browsertest/live-smoke.mjs
+```
+
+GitHub Actions additionally runs the six OS/Go matrix jobs and `govulncheck`.
 
 ## Evidence boundary
 
-| Environment or client | Status | Notes |
+| Environment / client | Status | Notes |
 |---|---|---|
-| Linux | PASS | local current-Go test/race/vet/SDK probe pass; CI covers compatibility/current Go plus browser/integration checks |
-| Windows | PASS | CI covers compatibility/current Go, build/tests/vet, current-Go race/SDK probe, and native Job Object regressions |
-| macOS | PASS | CI matrix covers compatibility/current Go build/tests/vet and current-Go race/SDK probe |
-| Cursor | NOT_RUN | no exact installed GUI-client version is asserted as end-to-end certified |
-| Claude Desktop | NOT_RUN | no exact installed GUI-client version is asserted as end-to-end certified |
-| Arbitrary third-party MCP servers | NOT_RUN | compatibility still depends on each server's protocol behavior, schemas, runtime, and external dependencies |
-| Reverse-proxy/public deployment matrix | PARTIAL | security policy and trusted-proxy behavior are automated; exhaustive Caddy/Nginx/TLS-provider combinations are not certified |
+| Linux | PASS | CI covers compatibility/current Go, test/vet/build; current Go adds race/SDK/browser/integration checks |
+| Windows | PASS | CI covers compatibility/current Go, test/vet/build; current Go adds race/SDK probe and native Job regressions |
+| macOS | PASS | CI covers compatibility/current Go test/vet/build; current Go adds race/SDK probe |
+| Browser Admin on loopback | PASS | Chromium regressions + real local Hub smoke |
+| Remote Admin CLI | PASS | automated CRUD/auth/redaction/conflict-path coverage |
+| Cursor | NOT_RUN | no exact installed version recorded as certified |
+| Claude Desktop | NOT_RUN | no exact installed version recorded as certified |
+| Arbitrary third-party MCP servers | NOT_RUN | depends on each server's protocol/runtime/schema/external dependencies |
+| Reverse-proxy/public deployment matrix | PARTIAL | security/trusted-proxy policy is automated; exhaustive Caddy/Nginx/TLS/provider combinations are not certified |
 
-## Remaining non-blocking work
+## Documentation status
 
-These are not known merge blockers for the v0.4.0 candidate, but they remain outside an exhaustive compatibility claim:
+Current user/maintainer documentation is expected to agree with this file and the code baseline:
 
-- run named/versioned GUI-client acceptance tests for Cursor and Claude Desktop when those clients are available;
-- broaden real third-party MCP server interoperability fixtures beyond the deterministic SDK probe and test servers;
-- exercise a larger matrix of production reverse proxies/TLS termination deployments;
-- consider moving the declared Go compatibility floor forward in a future release when backward compatibility is no longer useful.
+- `README.md`
+- `README.zh-CN.md`
+- `MCP-Hub-开发设计文档.md`
+- `MCP-Hub-Agent实施手册.md`
+- `docs/CONFIG.md`
+- `docs/SECURITY.md`
+- `docs/COMPATIBILITY.md`
+- `docs/VPS.md`
+- `docs/REMOTE-ADMIN.md`
+- `verification/sdkprobe/README.md`
 
-## Merge and release gates
+`docs/HARDENING-VERIFICATION.md` is historical v0.3.1 evidence and is explicitly labeled as such; historical measurements inside it should not be read as the current implementation contract.
 
-The v0.4.0 release-candidate PR is ready to leave draft only when its **final head** has a green GitHub Actions matrix and vulnerability scan, documentation matches that head, and review finds no unresolved blocker.
+## Remaining non-blocking engineering / compatibility work
 
-A formal release should be created from an exact signed/verified `v0.4.0` tag after the stacked hardening PRs are merged in order. Release artifacts are generated from the tagged commit; binaries and checksum files are not committed as stale repository artifacts.
+- run named/versioned Cursor and Claude Desktop acceptance tests;
+- broaden real third-party MCP interoperability fixtures;
+- exercise a larger production reverse-proxy/TLS matrix;
+- decide whether to merge/recreate the pending `x/sys` dependency bump;
+- consider moving the Go compatibility floor in a future release only with explicit justification.
+
+## Remaining release/governance work
+
+Before calling v0.4.0 a formal release:
+
+1. final main CI must be green;
+2. documentation must match the final release commit;
+3. pending dependency PRs need an explicit decision;
+4. create an exact `v0.4.0` tag pointing to the intended commit;
+5. verify the Release workflow completes;
+6. verify all six archives and `SHA256SUMS` are published.
+
+Recommended repository-governance follow-up:
+
+- enable main branch protection/ruleset with required CI and no force-push;
+- choose and add an explicit open-source license if public reuse is intended;
+- prune merged/obsolete remote branches after semantic verification.
+
+These governance items do not currently represent a known runtime release-blocking defect, but they matter for a mature public repository.
