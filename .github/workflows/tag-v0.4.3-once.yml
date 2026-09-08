@@ -1,4 +1,4 @@
-name: Tag v0.4.3 Once
+name: Publish v0.4.3 Once
 
 on:
   push:
@@ -11,30 +11,131 @@ permissions:
   contents: write
 
 concurrency:
-  group: tag-v0.4.3
+  group: publish-v0.4.3
   cancel-in-progress: false
 
 jobs:
-  tag:
+  build:
+    name: Build v0.4.3 archives
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout verified release commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: 5d875afb78780598ca80c18df48d2551a35f89ea
           fetch-depth: 0
-      - name: Create v0.4.3 tag at verified release commit
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.1'
+          cache: true
+      - name: Verify release source
         shell: bash
         run: |
           set -euo pipefail
-          release_sha='5d875afb78780598ca80c18df48d2551a35f89ea'
-          git show "${release_sha}:internal/buildinfo/buildinfo.go" | grep -Fq 'Version   = "0.4.3"'
-          git fetch --tags --force
-          if git rev-parse -q --verify refs/tags/v0.4.3 >/dev/null; then
-            tag_sha="$(git rev-list -n1 v0.4.3)"
-            test "$tag_sha" = "$release_sha"
+          test "$(git rev-parse HEAD)" = '5d875afb78780598ca80c18df48d2551a35f89ea'
+          grep -Fq 'Version   = "0.4.3"' internal/buildinfo/buildinfo.go
+          go test -count=1 -timeout 180s ./...
+          go vet ./...
+          (cd verification/sdkprobe && go test -count=1 -timeout 120s ./...)
+      - name: Build exact release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='0.4.3'
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          mkdir -p dist stage
+          for target in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            name="mcp-manager-${version}-${goos}-${goarch}"
+            bin='mcp-manager'
+            if [ "$goos" = windows ]; then bin='mcp-manager.exe'; fi
+            rm -rf stage/*
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath \
+              -ldflags="-s -w -X github.com/online111111/mcp-manager/internal/buildinfo.Version=${version} -X github.com/online111111/mcp-manager/internal/buildinfo.Commit=5d875afb78780598ca80c18df48d2551a35f89ea -X github.com/online111111/mcp-manager/internal/buildinfo.BuildDate=${build_date}" \
+              -o "stage/${bin}" ./cmd/mcp-manager
+            cp README.md stage/README.md
+            if [ "$goos" = windows ]; then
+              cp scripts/windows/start-mcp-manager.cmd stage/start-mcp-manager.cmd
+              cp scripts/windows/start-mcp-manager.ps1 stage/start-mcp-manager.ps1
+              cp scripts/windows/README-WINDOWS.txt stage/README-WINDOWS.txt
+              (cd stage && zip -q "../dist/${name}.zip" "$bin" README.md start-mcp-manager.cmd start-mcp-manager.ps1 README-WINDOWS.txt)
+            else
+              tar -C stage -czf "dist/${name}.tar.gz" "$bin" README.md
+            fi
+          done
+          (cd dist && sha256sum mcp-manager-* > SHA256SUMS)
+      - name: Upload exact release archives
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: v0.4.3-release-dist
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  verify-windows:
+    name: Verify exact v0.4.3 Windows ZIP
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - name: Download exact release archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: v0.4.3-release-dist
+          path: dist
+      - name: Run final Windows amd64 ZIP with Windows PowerShell 5.1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path $PWD 'dist\mcp-manager-0.4.3-windows-amd64.zip'
+          if (-not (Test-Path $zip)) { throw "Missing release archive: $zip" }
+          $extract = Join-Path $PWD 'v043-windows-smoke'
+          Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -Path $zip -DestinationPath $extract
+          foreach ($required in @('mcp-manager.exe','start-mcp-manager.cmd','start-mcp-manager.ps1','README-WINDOWS.txt')) {
+            if (-not (Test-Path (Join-Path $extract $required))) { throw "Release ZIP missing $required" }
+          }
+          Push-Location $extract
+          try {
+            .\mcp-manager.exe version
+            if ($LASTEXITCODE -ne 0) { throw "version failed: $LASTEXITCODE" }
+            Remove-Item .\config.json -Force -ErrorAction SilentlyContinue
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start-mcp-manager.ps1 -NoBrowser -ExitAfterReady
+            if ($LASTEXITCODE -ne 0) { throw "launcher failed under Windows PowerShell 5.1: $LASTEXITCODE" }
+            $bytes = [System.IO.File]::ReadAllBytes((Join-Path $PWD 'config.json'))
+            if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+              throw 'Launcher generated config.json with UTF-8 BOM'
+            }
+            .\mcp-manager.exe validate --config .\config.json
+            if ($LASTEXITCODE -ne 0) { throw "validate failed: $LASTEXITCODE" }
+          } finally {
+            Pop-Location
+          }
+
+  publish:
+    name: Publish v0.4.3 only after Windows verification
+    needs: verify-windows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified release archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: v0.4.3-release-dist
+          path: dist
+      - name: Verify tag target and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag_sha="$(gh api repos/${GITHUB_REPOSITORY}/git/ref/tags/v0.4.3 --jq '.object.sha')"
+          if [ "$tag_sha" != '5d875afb78780598ca80c18df48d2551a35f89ea' ]; then
+            tag_sha="$(git ls-remote https://github.com/${GITHUB_REPOSITORY}.git refs/tags/v0.4.3^{} | awk '{print $1}')"
+          fi
+          test "$tag_sha" = '5d875afb78780598ca80c18df48d2551a35f89ea'
+          if gh release view v0.4.3 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'v0.4.3 already published.'
             exit 0
           fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git tag -a v0.4.3 "$release_sha" -m 'MCP Manager v0.4.3'
-          git push origin refs/tags/v0.4.3
+          gh release create v0.4.3 --repo "$GITHUB_REPOSITORY" --verify-tag --target 5d875afb78780598ca80c18df48d2551a35f89ea --generate-notes dist/*
