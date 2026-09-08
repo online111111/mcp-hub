@@ -210,9 +210,10 @@ CI 覆盖 Linux、Windows、macOS 的兼容/当前 Go 矩阵；当前 Go 还跑 
 mcp-manager-0.4.0-linux-amd64.tar.gz
 ```
 
-## 社区
+## 社区与认可
 
-欢迎在 [烧饼论坛（sb.sb）](https://sb.sb/) 交流 MCP Manager 的使用、部署、问题反馈，以及 MCP / Agent 相关实践。
+- [LINUX DO](https://linux.do/) —— MCP Manager 认可并支持 LINUX DO 社区。
+- [烧饼论坛（sb.sb）](https://sb.sb/) —— 欢迎交流 MCP Manager 使用、部署、问题反馈，以及 MCP / Agent 相关实践。
 
 ## 文档
 
