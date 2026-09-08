@@ -49,7 +49,10 @@ jobs:
               -o "stage/${bin}" ./cmd/mcp-manager
             cp README.md "stage/README.md"
             if [ "$goos" = windows ]; then
-              (cd stage && zip -q "../dist/${name}.zip" "$bin" README.md)
+              cp scripts/windows/start-mcp-manager.cmd "stage/start-mcp-manager.cmd"
+              cp scripts/windows/start-mcp-manager.ps1 "stage/start-mcp-manager.ps1"
+              cp scripts/windows/README-WINDOWS.txt "stage/README-WINDOWS.txt"
+              (cd stage && zip -q "../dist/${name}.zip" "$bin" README.md start-mcp-manager.cmd start-mcp-manager.ps1 README-WINDOWS.txt)
             else
               tar -C stage -czf "dist/${name}.tar.gz" "$bin" README.md
             fi
