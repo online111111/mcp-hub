@@ -4,7 +4,7 @@
 
 **MCP Manager** 是一个轻量、自托管的 MCP 网关与管理控制台。下游 MCP 服务只配置一次，即可通过统一的 Streamable HTTP 入口提供给 IDE、Agent 和仅支持 stdio 的客户端。
 
-> 改名说明：MCP Manager 是原 **MCP Hub** 的新产品名。v0.4.0 发布候选版保留现有 JSON 配置结构以及 `/mcp`、`/admin` 路径，现有部署不需要因为改名重写配置。
+> 兼容说明：v0.4.0 保留现有 JSON 配置结构以及 `/mcp`、`/admin` 路径，已有部署升级到当前 MCP Manager 二进制时不需要重写配置。
 
 ## 核心能力
 
@@ -16,7 +16,7 @@
 - 稳定的公开工具名，调用失败后不自动重放可能带副作用的请求。
 - 默认回环安全模式，以及显式认证的 HTTPS 公网模式。
 - 为只支持 stdio 的客户端提供桥接。
-- 内置 `mcp-manager-deployer` Skill 和通用 Agent Prompt，用于部署、改名迁移、升级、验证和恢复。
+- 内置 `mcp-manager-deployer` Skill 和通用 Agent Prompt，用于部署、升级、验证和恢复。
 
 生产模块当前使用 `github.com/modelcontextprotocol/go-sdk v1.7.0`。这**不代表** MCP Manager 宣称完整原生覆盖 MCP 2026-07-28 的所有能力；具体边界见[兼容性说明](docs/COMPATIBILITY.md)。
 
@@ -44,7 +44,7 @@ http://127.0.0.1:8080/mcp
 ./mcp-manager doctor --endpoint http://127.0.0.1:8080
 ```
 
-## 新旧环境变量
+## 环境变量
 
 新安装统一使用：
 
@@ -53,7 +53,7 @@ MCP_MANAGER_TOKEN=...
 MCP_MANAGER_ADMIN_TOKEN=...
 ```
 
-改名兼容期内，CLI 仍接受原来的 `MCP_HUB_TOKEN` 和 `MCP_HUB_ADMIN_TOKEN`。新生成的示例和客户端导出只使用 `MCP_MANAGER_*`。已有部署不需要仅仅为了改名字就旋转 Token。
+v0.4 兼容期内，CLI 仍接受历史变量 `MCP_HUB_TOKEN` 和 `MCP_HUB_ADMIN_TOKEN`。新生成的示例和客户端导出只使用 `MCP_MANAGER_*`。已有部署不需要仅为了升级就旋转 Token。
 
 ## 客户端接入
 
@@ -93,7 +93,7 @@ mcp-manager admin delete filesystem --endpoint https://mcp.example.com --yes
 
 ## 配置
 
-改名后仍保留历史 `hub` 配置对象，这是兼容契约，不应该机械改成 `manager`：
+历史 `hub` 配置对象继续保留，这是兼容契约，不应该机械改成 `manager`：
 
 ```json
 {
@@ -126,20 +126,20 @@ Internet -> HTTPS Caddy/Nginx -> 127.0.0.1:8080 MCP Manager
 
 公网模式需要 HTTPS `publicUrl`、明确的 `allowedHosts`、可信代理 CIDR，以及两枚不同且至少 32 字符的 MCP/Admin Token。不要把 8080 直接暴露到公网。详见 [VPS 部署](docs/VPS.md)和[安全边界](docs/SECURITY.md)。
 
-## MCP Hub → MCP Manager 迁移
+## 旧部署升级
 
-这次改名采用兼容迁移，不要求一次性“全盘换名”：
+v0.4 的迁移不要求一次性替换所有兼容标识：
 
-1. 备份旧二进制、配置、环境文件、systemd/服务配置和反向代理配置。
+1. 备份现有二进制、配置、环境文件、systemd/服务配置和反向代理配置。
 2. 安装或暂存新的 `mcp-manager` 二进制。
 3. 用 `mcp-manager validate` 验证原有配置；配置 schema 和 `/mcp`、`/admin` 地址不变。
 4. 原有 `MCP_HUB_*` 变量在兼容期内可以继续使用；新服务文件优先写 `MCP_MANAGER_*`。
-5. 验证通过后再把服务启动命令从 `mcp-manager` 改成 `mcp-manager`。
+5. 验证通过后再把服务启动命令统一为 `mcp-manager`。
 6. 跑 `status`、`doctor`、Admin 登录和至少一条代表性客户端链路后，再删除旧二进制。
 
-迁移期间 `cmd/mcp-manager` 旧源码入口仍由 CI 编译；正式 v0.4 Release 只发布名为 `mcp-manager` 的新二进制。
+旧源码入口已经移除；正式 v0.4 Release 只发布名为 `mcp-manager` 的二进制。
 
-Go 内部 module path 在 v0.4 改名阶段暂时保持 `mcp-manager`，避免为了内部标识做一次高风险的全仓 import 重写。它不影响用户看到的产品名、二进制名或 Release 资产；module path 是否迁移可以等产品改名稳定后单独评估。
+Go module path 已与新仓库统一为 `github.com/online111111/mcp-manager`，内部 import 也全部使用这一规范路径。
 
 ## 开发与验证
 
@@ -152,7 +152,7 @@ node --test internal/admin/webtest/*.test.mjs
 go build -trimpath -o dist/mcp-manager ./cmd/mcp-manager
 ```
 
-CI 覆盖 Linux、Windows、macOS 的兼容/当前 Go 矩阵；当前 Go 还跑 race 与独立 SDK probe，Linux 额外运行 Chromium 回归和真实 MCP Manager 浏览器 smoke，并设有 `govulncheck`。
+CI 覆盖 Linux、Windows、macOS 的兼容/当前 Go 矩阵；当前 Go 还跑 race 与独立 SDK probe，Linux 额外运行 Chromium 回归和真实 MCP Manager 浏览器 smoke，并设有 `govulncheck` 与仓库身份检查，阻止旧产品名和旧仓库路径重新进入当前代码树。
 
 ## Release 包
 
