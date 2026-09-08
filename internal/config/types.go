@@ -48,10 +48,13 @@ type HubConfig struct {
 	Admin          AdminConfig   `json:"admin,omitempty"`
 }
 
-// HubAuthConfig protects the public MCP and diagnostic endpoints. Token supports
+// HubAuthConfig protects the public MCP and diagnostic endpoints. BearerToken is
+// the original single-token field and remains supported for backwards
+// compatibility. BearerTokens adds optional additional tokens. Every entry uses
 // the same one-pass ${NAME} expansion as downstream secrets.
 type HubAuthConfig struct {
-	BearerToken string `json:"bearerToken,omitempty"`
+	BearerToken  string   `json:"bearerToken,omitempty"`
+	BearerTokens []string `json:"bearerTokens,omitempty"`
 }
 
 // AdminConfig enables the embedded management UI. Token is the bootstrap admin
@@ -115,7 +118,10 @@ type ResolvedConfig struct {
 	PublicURL           string
 	AllowedHosts        []string
 	TrustedProxies      []string
+	// BearerToken remains the first effective MCP token for compatibility with
+	// older internal callers. BearerTokens is the authoritative complete set.
 	BearerToken         string
+	BearerTokens        []string
 	AdminEnabled        bool
 	AdminToken          string
 	AdminSessionTimeout time.Duration
@@ -145,7 +151,7 @@ type ResolvedServer struct {
 	DisabledTools map[string]struct{}
 
 	// Evaluated timeouts & concurrency
-	StartupTimeout time.Duration
+	StartupTimeout string
 	CallTimeout    time.Duration
 	MaxConcurrency int
 }
