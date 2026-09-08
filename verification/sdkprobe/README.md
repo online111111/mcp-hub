@@ -51,7 +51,7 @@ A passing SDK probe means the SDK behavior relied on by the tested production pa
 - MCP Manager process ownership or secret handling;
 - end-to-end Admin persistence.
 
-Those contracts are tested or tracked in the root module and in [`docs/IMPLEMENTATION-STATUS.md`](../../docs/IMPLEMENTATION-STATUS.md).
+Those contracts are tested or tracked in the root module and in the maintainer evidence file [`IMPLEMENTATION-STATUS.md`](../../.github/maintainer/IMPLEMENTATION-STATUS.md).
 
 ## Upgrade rule
 
@@ -62,6 +62,6 @@ When the MCP Go SDK is changed:
 3. add or update regressions for behavior MCP Manager relies on;
 4. run the probe normally and with `-race`;
 5. run the full root-module matrix and `govulncheck`;
-6. update `docs/COMPATIBILITY.md` and `docs/IMPLEMENTATION-STATUS.md` before release.
+6. update `docs/COMPATIBILITY.md` and `.github/maintainer/IMPLEMENTATION-STATUS.md` before release.
 
 Do not treat an SDK version bump as an automatic expansion of the product's advertised protocol boundary.

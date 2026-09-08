@@ -44,6 +44,8 @@ Diagnostics:
 ./mcp-manager doctor --endpoint http://127.0.0.1:8080
 ```
 
+Repository-aware coding, review, and deployment agents should start with [`AGENTS.md`](AGENTS.md).
+
 ## Authentication environment variables
 
 New installations use:
@@ -139,7 +141,7 @@ The v0.4 migration avoids a flag day:
 
 The legacy source entrypoint has been removed. Official v0.4 release archives use only the `mcp-manager` binary name.
 
-The Go module path now matches the renamed repository: `github.com/online111111/mcp-manager`. Internal imports use that canonical path.
+The Go module path matches the repository: `github.com/online111111/mcp-manager`.
 
 ## Development and verification
 
@@ -152,7 +154,7 @@ node --test internal/admin/webtest/*.test.mjs
 go build -trimpath -o dist/mcp-manager ./cmd/mcp-manager
 ```
 
-GitHub Actions covers Linux, Windows, and macOS on the compatibility/current Go matrix. Current-Go jobs run race tests and the independent SDK probe; Linux additionally runs Chromium regressions and a real-MCP-Manager browser smoke test. CI also runs `govulncheck` and repository-identity checks that reject stale public naming and repository paths.
+GitHub Actions covers Linux, Windows, and macOS on the compatibility/current Go matrix. Current-Go jobs run race tests and the independent SDK probe; Linux additionally runs Chromium regressions and a real-MCP-Manager browser smoke test. CI also runs `govulncheck` and repository-identity checks.
 
 ## Release packaging
 
@@ -173,8 +175,6 @@ Assets use names such as `mcp-manager-0.4.0-linux-amd64.tar.gz`.
 - [Compatibility](docs/COMPATIBILITY.md)
 - [Remote Admin](docs/REMOTE-ADMIN.md)
 - [VPS deployment](docs/VPS.md)
-- [Implementation status](docs/IMPLEMENTATION-STATUS.md)
-- [Console verification](docs/CONSOLE-POLISH.md)
 
 ## Security boundary
 
