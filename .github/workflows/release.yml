@@ -40,13 +40,13 @@ jobs:
           for target in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
             goos="${target%/*}"
             goarch="${target#*/}"
-            name="mcp-hub-${version}-${goos}-${goarch}"
-            bin="mcp-hub"
-            if [ "$goos" = windows ]; then bin="mcp-hub.exe"; fi
+            name="mcp-manager-${version}-${goos}-${goarch}"
+            bin="mcp-manager"
+            if [ "$goos" = windows ]; then bin="mcp-manager.exe"; fi
             rm -rf stage/*
             CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath \
               -ldflags="-s -w -X mcp-hub/internal/buildinfo.Version=${version} -X mcp-hub/internal/buildinfo.Commit=${GITHUB_SHA} -X mcp-hub/internal/buildinfo.BuildDate=${build_date}" \
-              -o "stage/${bin}" ./cmd/mcp-hub
+              -o "stage/${bin}" ./cmd/mcp-manager
             cp README.md "stage/README.md"
             if [ "$goos" = windows ]; then
               (cd stage && zip -q "../dist/${name}.zip" "$bin" README.md)
@@ -54,7 +54,7 @@ jobs:
               tar -C stage -czf "dist/${name}.tar.gz" "$bin" README.md
             fi
           done
-          (cd dist && sha256sum mcp-hub-* > SHA256SUMS)
+          (cd dist && sha256sum mcp-manager-* > SHA256SUMS)
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
