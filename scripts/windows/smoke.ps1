@@ -18,9 +18,11 @@ $utf8 = New-Object System.Text.UTF8Encoding($false)
 function Invoke-Launcher {
     Push-Location -LiteralPath $package
     try {
-        # Exercise the entrypoint users double-click, including CMD -> PS5.1.
-        # Redirect stdin to avoid a failed wrapper pause blocking a CI runner.
-        $output = & $env:ComSpec /d /c 'start-mcp-manager.cmd -NoBrowser -ExitAfterReady <nul' 2>&1
+        # Merge native streams in CMD, not PowerShell 5.1: PowerShell turns
+        # redirected stderr into NativeCommandError under ErrorAction Stop,
+        # hiding the actual diagnostic before the exit-code assertion runs.
+        # Stdin redirection keeps a failed wrapper pause from blocking CI.
+        $output = & $env:ComSpec /d /c 'start-mcp-manager.cmd -NoBrowser -ExitAfterReady <nul 2>&1'
         $code = $LASTEXITCODE
         if ($code -ne 0) {
             $output | ForEach-Object { Write-Host $_ }
@@ -63,7 +65,7 @@ try {
     Set-Clipboard -Value 'audit-no-secret'
     Push-Location -LiteralPath $package
     try {
-        & $env:ComSpec /d /c 'copy-admin-token.cmd <nul'
+        & $env:ComSpec /d /c 'copy-admin-token.cmd <nul 2>&1'
         if ($LASTEXITCODE -ne 0) { throw 'Packaged token-copy CMD failed.' }
     } finally { Pop-Location }
     if ((Get-Clipboard -Raw).Trim() -cne $adminToken) { throw 'Recovery helper copied the wrong credential.' }
