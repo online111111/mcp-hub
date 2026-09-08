@@ -1,0 +1,71 @@
+name: Bug report
+description: Report a reproducible MCP Manager problem
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Remove tokens, credentials, private hostnames, and other secrets before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: MCP Manager version
+      description: Release version or exact commit SHA.
+      placeholder: v0.4.5 or abc123...
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, and relevant runtime/client details.
+      placeholder: Windows 11 amd64 / Ubuntu 24.04 arm64 / macOS arm64
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Downstream transport
+      options:
+        - stdio
+        - Streamable HTTP
+        - Both / mixed
+        - Not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest reliable sequence that reproduces the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste only sanitized logs. Do not include tokens or secrets.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and pull requests for duplicates.
+          required: true
+        - label: I removed secrets and sensitive information from this report.
+          required: true
