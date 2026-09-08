@@ -8,6 +8,7 @@ Set-Location -LiteralPath $PSScriptRoot
 $exe = Join-Path $PSScriptRoot 'mcp-manager.exe'
 $config = Join-Path $PSScriptRoot 'config.json'
 $process = $null
+$processStarted = $false
 
 function Write-NewUtf8Config {
     param([string]$Path, [string]$Content)
@@ -25,7 +26,6 @@ try {
         throw 'mcp-manager.exe was not found next to the launcher.'
     }
 
-    $createdConfig = $false
     $copiedToken = $false
     if (-not (Test-Path -LiteralPath $config)) {
         Write-Host 'First run: creating a local-only MCP Manager configuration...'
@@ -40,7 +40,6 @@ try {
             mcpServers = [ordered]@{}
         }
         Write-NewUtf8Config -Path $config -Content ($cfg | ConvertTo-Json -Depth 8)
-        $createdConfig = $true
         Write-Host 'Created config.json with a random Admin token (UTF-8 without BOM).'
         try {
             Set-Clipboard -Value $token
@@ -69,8 +68,16 @@ try {
     $adminUrl = $baseUrl + '/admin/'
 
     Write-Host ('Starting MCP Manager on ' + $baseUrl + ' ...')
-    $quotedConfig = '"' + $config + '"'
-    $process = Start-Process -FilePath $exe -ArgumentList @('serve', '--config', $quotedConfig) -PassThru -NoNewWindow
+    # Windows PowerShell 5.1 Start-Process resolves its working directory as
+    # a wildcard path, even when omitted. Use literal .NET process properties
+    # so installation directories containing brackets remain valid.
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo.FileName = $exe
+    $process.StartInfo.Arguments = 'serve --config "' + $config + '"'
+    $process.StartInfo.WorkingDirectory = $PSScriptRoot
+    $process.StartInfo.UseShellExecute = $false
+    $processStarted = $process.Start()
+    if (-not $processStarted) { throw 'Could not create the MCP Manager process.' }
     # Retain the process handle so ExitCode remains available after termination.
     $null = $process.Handle
     $timer = [System.Diagnostics.Stopwatch]::StartNew()
@@ -108,8 +115,14 @@ try {
         exit 0
     }
     if (-not $NoBrowser) {
-        try { Start-Process $adminUrl }
-        catch { Write-Warning ('Could not open a browser. Open ' + $adminUrl + ' manually; the service remains running.') }
+        try {
+            $browserInfo = New-Object System.Diagnostics.ProcessStartInfo
+            $browserInfo.FileName = $adminUrl
+            $browserInfo.WorkingDirectory = $PSScriptRoot
+            $browserInfo.UseShellExecute = $true
+            $browser = [System.Diagnostics.Process]::Start($browserInfo)
+            if ($null -ne $browser) { $browser.Dispose() }
+        } catch { Write-Warning ('Could not open a browser. Open ' + $adminUrl + ' manually; the service remains running.') }
     }
     $process.WaitForExit()
     exit $process.ExitCode
@@ -118,7 +131,7 @@ try {
     exit 1
 } finally {
     if ($null -ne $process) {
-        if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+        if ($processStarted -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
         $process.Dispose()
     }
 }
