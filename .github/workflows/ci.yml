@@ -77,12 +77,14 @@ jobs:
         if: matrix.current
         working-directory: verification/sdkprobe
         run: go test -race -count=1 -timeout 120s ./...
-      - name: Integrated Chromium smoke against real Hub
+      - name: Integrated Chromium smoke against real Manager
         if: runner.os == 'Linux' && matrix.current
         run: |
-          go build -trimpath -o dist/mcp-hub ./cmd/mcp-hub
+          go build -trimpath -o dist/mcp-manager ./cmd/mcp-manager
           node internal/admin/browsertest/live-smoke.mjs
-      - name: Build
+      - name: Build MCP Manager
+        run: go build -trimpath ./cmd/mcp-manager
+      - name: Build legacy entrypoint
         run: go build -trimpath ./cmd/mcp-hub
 
   vulnerability-scan:
