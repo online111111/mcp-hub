@@ -125,7 +125,7 @@ func ImportServers(sourceData []byte, targetConfigPath string, opts ImportOption
 		if os.IsNotExist(err) {
 			targetCfg = Config{
 				Version: CurrentVersion,
-				Hub: HubConfig{Listen: DefaultListen},
+				Hub:     HubConfig{Listen: DefaultListen},
 				Defaults: DefaultsConfig{
 					StartupTimeout: "20s",
 					CallTimeout:    "60s",

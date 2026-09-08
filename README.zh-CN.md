@@ -134,12 +134,12 @@ Internet -> HTTPS Caddy/Nginx -> 127.0.0.1:8080 MCP Manager
 2. 安装或暂存新的 `mcp-manager` 二进制。
 3. 用 `mcp-manager validate` 验证原有配置；配置 schema 和 `/mcp`、`/admin` 地址不变。
 4. 原有 `MCP_HUB_*` 变量在兼容期内可以继续使用；新服务文件优先写 `MCP_MANAGER_*`。
-5. 验证通过后再把服务启动命令从 `mcp-hub` 改成 `mcp-manager`。
+5. 验证通过后再把服务启动命令从 `mcp-manager` 改成 `mcp-manager`。
 6. 跑 `status`、`doctor`、Admin 登录和至少一条代表性客户端链路后，再删除旧二进制。
 
-迁移期间 `cmd/mcp-hub` 旧源码入口仍由 CI 编译；正式 v0.4 Release 只发布名为 `mcp-manager` 的新二进制。
+迁移期间 `cmd/mcp-manager` 旧源码入口仍由 CI 编译；正式 v0.4 Release 只发布名为 `mcp-manager` 的新二进制。
 
-Go 内部 module path 在 v0.4 改名阶段暂时保持 `mcp-hub`，避免为了内部标识做一次高风险的全仓 import 重写。它不影响用户看到的产品名、二进制名或 Release 资产；module path 是否迁移可以等产品改名稳定后单独评估。
+Go 内部 module path 在 v0.4 改名阶段暂时保持 `mcp-manager`，避免为了内部标识做一次高风险的全仓 import 重写。它不影响用户看到的产品名、二进制名或 Release 资产；module path 是否迁移可以等产品改名稳定后单独评估。
 
 ## 开发与验证
 

@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"mcp-hub/internal/config"
-	"mcp-hub/internal/inbound"
-	"mcp-hub/internal/manager"
+	"github.com/online111111/mcp-manager/internal/config"
+	"github.com/online111111/mcp-manager/internal/inbound"
+	"github.com/online111111/mcp-manager/internal/manager"
 )
 
 type ConfigLoader func([]byte, string) (*config.Config, *config.ResolvedConfig, error)

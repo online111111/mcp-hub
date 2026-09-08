@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"mcp-hub/internal/admin"
+	"github.com/online111111/mcp-manager/internal/admin"
 )
 
 func newRemoteAdminCLITestServer(t *testing.T) *httptest.Server {

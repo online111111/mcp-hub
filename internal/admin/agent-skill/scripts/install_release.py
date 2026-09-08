@@ -19,7 +19,6 @@ import zipfile
 from pathlib import Path
 
 DEFAULT_REPO = "online111111/mcp-manager"
-LEGACY_REPO = "online111111/mcp-hub"
 USER_AGENT = "mcp-manager-deployer/1"
 
 
@@ -56,22 +55,11 @@ def download(url: str, dest: Path) -> None:
 
 
 def release_metadata(repo: str, version: str | None) -> tuple[str, dict]:
-    def fetch(candidate: str) -> dict:
-        base = f"https://api.github.com/repos/{candidate}/releases"
-        if version:
-            tag = version if version.startswith("v") else f"v{version}"
-            return api_json(f"{base}/tags/{tag}")
-        return api_json(f"{base}/latest")
-
-    try:
-        return repo, fetch(repo)
-    except urllib.error.HTTPError as exc:
-        # During the repository rename window, allow the default new slug to
-        # fall back to the historical repository. Explicit --repo never falls back.
-        if repo != DEFAULT_REPO or exc.code not in {404, 301, 302}:
-            raise
-        return LEGACY_REPO, fetch(LEGACY_REPO)
-
+    base = f"https://api.github.com/repos/{repo}/releases"
+    if version:
+        tag = version if version.startswith("v") else f"v{version}"
+        return repo, api_json(f"{base}/tags/{tag}")
+    return repo, api_json(f"{base}/latest")
 
 def parse_checksum(text: str, asset_name: str) -> str:
     for raw in text.splitlines():

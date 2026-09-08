@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"mcp-hub/internal/netpolicy"
+	"github.com/online111111/mcp-manager/internal/netpolicy"
 )
 
 const (
-	managerTokenEnv       = "MCP_MANAGER_TOKEN"
-	legacyHubTokenEnv     = "MCP_HUB_TOKEN"
-	maxHubResponseSize    = int64(8 * 1024 * 1024)
+	managerTokenEnv    = "MCP_MANAGER_TOKEN"
+	legacyHubTokenEnv  = "MCP_HUB_TOKEN"
+	maxHubResponseSize = int64(8 * 1024 * 1024)
 )
 
 var errHubResponseTooLarge = errors.New("Hub response exceeds 8 MiB limit")

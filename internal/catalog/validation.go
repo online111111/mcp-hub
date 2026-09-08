@@ -48,12 +48,12 @@ func validateSchemaObject(schema any, schemaName string) error {
 
 // ValidateTool validates the schema and size bounds of an *mcp.Tool.
 // It checks:
-// 1. Tool is non-nil and Name is non-empty.
-// 2. InputSchema is a valid JSON object with top-level type == "object".
-// 3. OutputSchema (if present) is also a JSON object with top-level type == "object".
-//    This deliberately matches the contract enforced by the pinned MCP Go SDK's
-//    Server.AddTool implementation, which panics for non-object output schemas.
-// 4. JSON-encoded size does not exceed MaxToolDefinitionBytes (256 KiB).
+//  1. Tool is non-nil and Name is non-empty.
+//  2. InputSchema is a valid JSON object with top-level type == "object".
+//  3. OutputSchema (if present) is also a JSON object with top-level type == "object".
+//     This deliberately matches the contract enforced by the pinned MCP Go SDK's
+//     Server.AddTool implementation, which panics for non-object output schemas.
+//  4. JSON-encoded size does not exceed MaxToolDefinitionBytes (256 KiB).
 func ValidateTool(tool *mcp.Tool) error {
 	if tool == nil {
 		return errors.New("tool is nil")

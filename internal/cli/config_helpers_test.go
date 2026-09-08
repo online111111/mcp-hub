@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"mcp-hub/internal/cli"
+	"github.com/online111111/mcp-manager/internal/cli"
 )
 
 func TestCLI_ValidateConfig(t *testing.T) {

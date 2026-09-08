@@ -36,9 +36,9 @@
 - 新变量：`MCP_MANAGER_TOKEN`、`MCP_MANAGER_ADMIN_TOKEN`
 - 旧 CLI 变量：`MCP_HUB_TOKEN`、`MCP_HUB_ADMIN_TOKEN` 兼容保留
 - 配置 `hub.*`、`/mcp`、`/admin` 不改
-- 旧 `cmd/mcp-hub` 继续由 CI 编译验证
+- 旧 `cmd/mcp-manager` 继续由 CI 编译验证
 - 正式 Release 只发布 `mcp-manager-*`
-- 内部 Go module path v0.4 暂时保持 `mcp-hub`
+- 内部 Go module path v0.4 暂时保持 `mcp-manager`
 
 不要为了品牌一致性破坏已工作的 systemd service 名、目录名或旧环境变量；先保证运行兼容，再做可选的运维层美化迁移。
 
@@ -46,7 +46,7 @@
 
 ```text
 cmd/mcp-manager/             正式 CLI 入口
-cmd/mcp-hub/                 迁移期兼容源码入口
+cmd/mcp-manager/                 迁移期兼容源码入口
 internal/admin/              Admin API/UI/Agent 资源
 internal/bridge/             stdio bridge
 internal/cli/                CLI + Remote Admin
@@ -80,7 +80,7 @@ go test -count=1 -timeout 180s ./...
 go test -race -count=1 -timeout 240s ./...
 go vet ./...
 go build -trimpath -o dist/mcp-manager ./cmd/mcp-manager
-go build -trimpath ./cmd/mcp-hub
+go build -trimpath ./cmd/mcp-manager
 node --check internal/admin/web/app.js
 node --test internal/admin/webtest/*.test.mjs
 ```

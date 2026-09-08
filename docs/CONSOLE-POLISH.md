@@ -33,7 +33,7 @@ node --check internal/admin/web/app.js
 node --test internal/admin/webtest/*.test.mjs
 npm ci --prefix internal/admin/browsertest
 npm test --prefix internal/admin/browsertest
-go build -p 2 -trimpath -o dist/mcp-hub ./cmd/mcp-hub
+go build -p 2 -trimpath -o dist/mcp-manager ./cmd/mcp-manager
 node internal/admin/browsertest/live-smoke.mjs
 ```
 

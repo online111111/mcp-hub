@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"mcp-hub/internal/config"
+	"github.com/online111111/mcp-manager/internal/config"
 )
 
 func TestImport_Success(t *testing.T) {

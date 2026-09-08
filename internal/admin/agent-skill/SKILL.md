@@ -1,6 +1,6 @@
 ---
 name: mcp-manager-deployer
-description: Deploy, configure, upgrade, repair, verify, or remove MCP Manager for server-side hosting or client-side access. Use when an agent needs to install online111111/mcp-manager (or migrate an existing online111111/mcp-hub installation), deploy it to Linux/macOS/Windows or a VPS, expose it safely through HTTPS, configure downstream MCP services, connect HTTP or stdio-only clients, use Remote Admin, upgrade an existing installation, or recover a broken deployment.
+description: Deploy, configure, upgrade, repair, verify, or remove MCP Manager for server-side hosting or client-side access. Use when an agent needs to install online111111/mcp-manager (including installations created before the MCP Manager rename), deploy it to Linux/macOS/Windows or a VPS, expose it safely through HTTPS, configure downstream MCP services, connect HTTP or stdio-only clients, use Remote Admin, upgrade an existing installation, or recover a broken deployment.
 ---
 
 # MCP Manager Deployer

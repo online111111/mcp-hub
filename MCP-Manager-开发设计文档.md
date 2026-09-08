@@ -41,7 +41,7 @@ v0.4 改名会改变：
 - Admin 安全事务语义
 - 现有配置中的旧环境变量引用
 
-兼容期 CLI 仍接受 `MCP_HUB_TOKEN` / `MCP_HUB_ADMIN_TOKEN`。内部 Go module path 在 v0.4 暂时保持 `mcp-hub`，将内部 import 重写与产品改名风险隔离。
+兼容期 CLI 仍接受 `MCP_HUB_TOKEN` / `MCP_HUB_ADMIN_TOKEN`。内部 Go module path 在 v0.4 暂时保持 `mcp-manager`，将内部 import 重写与产品改名风险隔离。
 
 ## 核心架构
 

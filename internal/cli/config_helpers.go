@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"mcp-hub/internal/config"
+	"github.com/online111111/mcp-manager/internal/config"
 )
 
 func ValidateConfig(configPath string) (*config.Config, *config.ResolvedConfig, error) {

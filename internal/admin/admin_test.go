@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"mcp-hub/internal/config"
+	"github.com/online111111/mcp-manager/internal/config"
 )
 
 func TestEmbeddedAdminUsesCSPCompatibleModuleEvents(t *testing.T) {

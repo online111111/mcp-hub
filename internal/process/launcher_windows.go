@@ -30,7 +30,7 @@ type windowsProcess struct {
 	doneChan  chan struct{}
 }
 
-func (wp *windowsProcess) Reader() io.ReadCloser { return &pipeReader{Reader: wp.stdout, proc: wp} }
+func (wp *windowsProcess) Reader() io.ReadCloser  { return &pipeReader{Reader: wp.stdout, proc: wp} }
 func (wp *windowsProcess) Writer() io.WriteCloser { return &pipeWriter{Writer: wp.stdin, proc: wp} }
 
 func (wp *windowsProcess) Pid() int {

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"mcp-hub/internal/netpolicy"
+	"github.com/online111111/mcp-manager/internal/netpolicy"
 )
 
 var (

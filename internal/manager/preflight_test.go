@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"mcp-hub/internal/config"
+	"github.com/online111111/mcp-manager/internal/config"
 )
 
 type preflightSession struct {

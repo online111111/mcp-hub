@@ -3,7 +3,7 @@ package config_test
 import (
 	"testing"
 
-	"mcp-hub/internal/config"
+	"github.com/online111111/mcp-manager/internal/config"
 )
 
 func TestResolve_StdioAmbientSecretsRequireExplicitOptIn(t *testing.T) {

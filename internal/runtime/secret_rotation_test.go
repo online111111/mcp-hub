@@ -3,7 +3,7 @@ package runtime
 import (
 	"testing"
 
-	"mcp-hub/internal/config"
+	"github.com/online111111/mcp-manager/internal/config"
 )
 
 func TestStripStartupSecretsKeepsActiveTokensOutOfStdioEnv(t *testing.T) {
@@ -20,8 +20,8 @@ func TestStripStartupSecretsKeepsActiveTokensOutOfStdioEnv(t *testing.T) {
 				},
 			},
 			"http": {
-				ID:   "http",
-				Type: config.ServerTypeStreamableHTTP,
+				ID:      "http",
+				Type:    config.ServerTypeStreamableHTTP,
 				Headers: map[string]string{"Authorization": "Bearer old-mcp"},
 			},
 		},

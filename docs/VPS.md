@@ -59,7 +59,7 @@ mcp-manager validate --config /etc/mcp-manager/config.json
 /etc/systemd/system/mcp-manager.service
 ```
 
-已有 `/etc/mcp-hub`、`mcp-hub.service` 可以在迁移期继续使用；目录/服务名的改名不是运行时必须条件。
+已有 `/etc/mcp-manager`、`mcp-manager.service` 可以在迁移期继续使用；目录/服务名的改名不是运行时必须条件。
 
 ## 4. systemd 示例
 

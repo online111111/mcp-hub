@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"mcp-hub/internal/inbound"
+	"github.com/online111111/mcp-manager/internal/inbound"
 )
 
 func TestCLI_Validate(t *testing.T) {

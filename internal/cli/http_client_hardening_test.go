@@ -30,8 +30,8 @@ func TestBearerTransportCapsResponseBody(t *testing.T) {
 	tr := bearerTransport{base: roundTripFunc(func(*http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: http.StatusOK,
-			Body: io.NopCloser(strings.NewReader(strings.Repeat("x", int(maxHubResponseSize)+1024))),
-			Header: make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(strings.Repeat("x", int(maxHubResponseSize)+1024))),
+			Header:     make(http.Header),
 		}, nil
 	})}
 	req, _ := http.NewRequest(http.MethodGet, "http://127.0.0.1:8080/api/v1/status", nil)

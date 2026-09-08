@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"mcp-hub/internal/config"
-	"mcp-hub/internal/manager"
-	hubruntime "mcp-hub/internal/runtime"
+	"github.com/online111111/mcp-manager/internal/config"
+	"github.com/online111111/mcp-manager/internal/manager"
+	hubruntime "github.com/online111111/mcp-manager/internal/runtime"
 )
 
 // Exercise actual Manager reconciliation on the rejected config and restoration,

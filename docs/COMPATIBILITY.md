@@ -74,7 +74,7 @@ The MCP Hub -> MCP Manager rename intentionally preserves the wire/config contra
 - JSON `hub.*` fields do not change;
 - old `MCP_HUB_*` CLI token variables remain accepted during migration;
 - official new binary/Release naming is `mcp-manager`;
-- internal Go module path remains `mcp-hub` during v0.4 to avoid a repository-wide import rewrite unrelated to runtime compatibility.
+- internal Go module path remains `mcp-manager` during v0.4 to avoid a repository-wide import rewrite unrelated to runtime compatibility.
 
 ## Related
 

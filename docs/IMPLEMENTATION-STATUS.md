@@ -23,7 +23,7 @@ Status values are `PASS`, `PARTIAL`, and `NOT_RUN`. `PASS` means the stated cont
 | CI / vulnerability gate | PASS | Linux/Windows/macOS × Go 1.25.8/1.27.1, current-Go race + SDK probe, Linux Chromium + real-Manager smoke, `govulncheck`, pinned Actions |
 | Release packaging | PARTIAL | workflow builds six `mcp-manager-*` archives plus SHA256SUMS; no formal `v0.4.0` Release has been published yet |
 | Repository rename | PARTIAL | code/product is prepared for `online111111/mcp-manager`; GitHub repository slug itself still requires repository-administration rename |
-| Go module path | PARTIAL | internal module path remains `mcp-hub` during v0.4 to avoid a high-risk import-only rewrite; this does not affect public binary/product identity |
+| Go module path | PARTIAL | internal module path remains `mcp-manager` during v0.4 to avoid a high-risk import-only rewrite; this does not affect public binary/product identity |
 | Branch protection / ruleset | PARTIAL | main currently lacks enforced protection/ruleset |
 | License | PARTIAL | no LICENSE selected yet; owner/legal decision remains pending |
 
@@ -59,9 +59,9 @@ Preserved:
 - runtime/admin transaction semantics
 - existing stored secrets/config files
 - legacy CLI token variables during compatibility migration
-- legacy `cmd/mcp-hub` source entrypoint in CI for the transition
+- legacy `cmd/mcp-manager` source entrypoint in CI for the transition
 
-The internal Go module path stays `mcp-hub` for v0.4. A module-path change is intentionally separated from the public rename so a branding migration does not create a repository-wide import rewrite and unrelated compatibility risk.
+The internal Go module path stays `mcp-manager` for v0.4. A module-path change is intentionally separated from the public rename so a branding migration does not create a repository-wide import rewrite and unrelated compatibility risk.
 
 ## Verification commands
 
@@ -70,7 +70,7 @@ go test -count=1 -timeout 180s ./...
 go test -race -count=1 -timeout 240s ./...
 go vet ./...
 go build -trimpath -o dist/mcp-manager ./cmd/mcp-manager
-go build -trimpath ./cmd/mcp-hub
+go build -trimpath ./cmd/mcp-manager
 node --check internal/admin/web/app.js
 node --test internal/admin/webtest/*.test.mjs
 ```

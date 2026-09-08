@@ -11,7 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"mcp-hub/internal/catalog"
+	"github.com/online111111/mcp-manager/internal/catalog"
 )
 
 const (
@@ -124,12 +124,12 @@ func (r *Router) RouteTool(ctx context.Context, req *mcp.CallToolRequest) (*mcp.
 			errorCategory = "cancelled"
 		}
 		r.recordCall(CallRecord{
-			RequestID: reqID,
-			Time: startedAt,
-			Duration: time.Since(startedAt),
-			Tool: publicName,
-			ServerID: serverID,
-			Outcome: outcome,
+			RequestID:     reqID,
+			Time:          startedAt,
+			Duration:      time.Since(startedAt),
+			Tool:          publicName,
+			ServerID:      serverID,
+			Outcome:       outcome,
 			ErrorCategory: errorCategory,
 		})
 	}()

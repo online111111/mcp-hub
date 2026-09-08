@@ -137,9 +137,9 @@ The rename is designed to avoid a flag day:
 5. Change the service command to `mcp-manager` only after validation.
 6. Run `status`, `doctor`, Admin login, and a representative client check before deleting the old binary.
 
-The legacy `cmd/mcp-hub` source entrypoint is still built in CI during this transition. Official v0.4 release archives use the `mcp-manager` binary name.
+The legacy `cmd/mcp-manager` source entrypoint is still built in CI during this transition. Official v0.4 release archives use the `mcp-manager` binary name.
 
-The internal Go module path remains `mcp-hub` for the v0.4 rename to avoid a high-risk repository-wide import rewrite. It is an implementation detail, not the public binary/product identity. A module-path migration can be evaluated separately after the product rename is stable.
+The internal Go module path remains `mcp-manager` for the v0.4 rename to avoid a high-risk repository-wide import rewrite. It is an implementation detail, not the public binary/product identity. A module-path migration can be evaluated separately after the product rename is stable.
 
 ## Development and verification
 

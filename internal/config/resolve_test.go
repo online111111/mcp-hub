@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"mcp-hub/internal/config"
+	"github.com/online111111/mcp-manager/internal/config"
 )
 
 func TestResolve_PathsWithSpaces(t *testing.T) {

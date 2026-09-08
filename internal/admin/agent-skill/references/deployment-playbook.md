@@ -19,7 +19,7 @@ Treat this as an in-place product rename, not a new deployment:
 - Preserve tokens unless the user explicitly requests rotation.
 - Install the new binary next to the old one or stage it as `.new`.
 - Validate the existing config with the new binary before replacement.
-- Update the service command from `mcp-hub` to `mcp-manager` only after validation.
+- Update the service command from `mcp-manager` to `mcp-manager` only after validation.
 - Keep a rollback copy of the old binary/service unit until post-restart checks pass.
 - Service names/directories may remain legacy names temporarily; rename them separately if operationally useful.
 
