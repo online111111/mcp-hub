@@ -1,0 +1,152 @@
+name: Finalize MCP Manager rename
+
+on:
+  push:
+    branches:
+      - chore/finalize-mcp-manager-rename
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: ${{ !contains(github.event.head_commit.message, '[finalized rename]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout migration branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: chore/finalize-mcp-manager-rename
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.1'
+          cache: true
+
+      - name: Finalize repository identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path('.')
+          skip_parts = {'.git', 'node_modules', 'dist', 'build'}
+          for path in root.rglob('*'):
+              if not path.is_file() or any(part in skip_parts for part in path.parts):
+                  continue
+              try:
+                  text = path.read_text(encoding='utf-8')
+              except (UnicodeDecodeError, OSError):
+                  continue
+              original = text
+              text = text.replace('https://github.com/online111111/mcp-hub', 'https://github.com/online111111/mcp-manager')
+              text = text.replace('github.com/online111111/mcp-hub', 'github.com/online111111/mcp-manager')
+              text = text.replace('mcp-hub/internal/', 'github.com/online111111/mcp-manager/internal/')
+              text = text.replace('mcp-hub', 'mcp-manager')
+              text = text.replace('MCP-Hub-', 'MCP-Manager-')
+              text = text.replace('module mcp-manager\n', 'module github.com/online111111/mcp-manager\n')
+              if text != original:
+                  path.write_text(text, encoding='utf-8')
+
+          # Make the new Admin token name primary while preserving the old env
+          # variable as an explicit, bounded compatibility fallback.
+          env_compat = Path('internal/cli/env_compat.go')
+          env_compat.write_text('''package cli\n\nimport (\n\t"os"\n\t"strings"\n)\n\nconst (\n\tmanagerAdminTokenEnv = "MCP_MANAGER_ADMIN_TOKEN"\n\tlegacyAdminTokenEnv  = "MCP_HUB_ADMIN_TOKEN"\n)\n\nfunc adminTokenFromEnv() string {\n\tif token := strings.TrimSpace(os.Getenv(managerAdminTokenEnv)); token != "" {\n\t\treturn token\n\t}\n\treturn strings.TrimSpace(os.Getenv(legacyAdminTokenEnv))\n}\n''', encoding='utf-8')
+
+          admin = Path('internal/cli/admin_remote.go')
+          text = admin.read_text(encoding='utf-8')
+          text = text.replace('const adminTokenEnv = "MCP_HUB_ADMIN_TOKEN"', 'const adminTokenEnv = managerAdminTokenEnv')
+          text = text.replace('Remote Admin - manage downstream MCP services on a Hub', 'Remote Admin - manage downstream MCP services on MCP Manager')
+          text = text.replace('Admin token defaults to MCP_HUB_ADMIN_TOKEN. Remote endpoints require HTTPS;\nplain HTTP is allowed only for loopback/local development.', 'Admin token defaults to MCP_MANAGER_ADMIN_TOKEN. The legacy MCP_HUB_ADMIN_TOKEN is accepted during the v0.4 compatibility window. Remote endpoints require HTTPS;\nplain HTTP is allowed only for loopback/local development.')
+          text = text.replace('"Admin token (or MCP_HUB_ADMIN_TOKEN)"', '"Admin token (or MCP_MANAGER_ADMIN_TOKEN; legacy MCP_HUB_ADMIN_TOKEN is accepted)"')
+          text = text.replace('return os.Getenv(adminTokenEnv)', 'return adminTokenFromEnv()')
+          admin.write_text(text, encoding='utf-8')
+
+          # The repository rename is complete, so the release installer no
+          # longer needs a fallback to the historical slug.
+          installer = Path('internal/admin/agent-skill/scripts/install_release.py')
+          text = installer.read_text(encoding='utf-8')
+          text = text.replace('LEGACY_REPO = "online111111/mcp-manager"\n', '')
+          start = text.index('def release_metadata(')
+          end = text.index('\ndef parse_checksum', start)
+          replacement = '''def release_metadata(repo: str, version: str | None) -> tuple[str, dict]:\n    base = f"https://api.github.com/repos/{repo}/releases"\n    if version:\n        tag = version if version.startswith("v") else f"v{version}"\n        return repo, api_json(f"{base}/tags/{tag}")\n    return repo, api_json(f"{base}/latest")\n\n'''
+          text = text[:start] + replacement + text[end + 1:]
+          installer.write_text(text, encoding='utf-8')
+
+          skill = Path('internal/admin/agent-skill/SKILL.md')
+          text = skill.read_text(encoding='utf-8')
+          text = text.replace('(or migrate an existing online111111/mcp-manager installation)', '(including installations created before the MCP Manager rename)')
+          skill.write_text(text, encoding='utf-8')
+
+          # The pre-release migration is complete: keep runtime env aliases for
+          # upgrades, but remove old source entrypoints and old document stubs.
+          for old in [Path('MCP-Hub-Agent实施手册.md'), Path('MCP-Hub-开发设计文档.md')]:
+              if old.exists():
+                  old.unlink()
+          PY
+
+          rm -rf cmd/mcp-hub
+
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          ci = Path('.github/workflows/ci.yml')
+          text = ci.read_text(encoding='utf-8')
+          text = re.sub(r'\n      - name: Build legacy entrypoint\n        run: go build -trimpath ./cmd/mcp-manager\n', '\n', text)
+          ci.write_text(text, encoding='utf-8')
+          PY
+
+          gofmt -w $(find cmd internal -name '*.go' -type f)
+          go mod tidy
+
+      - name: Rename invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(head -n 1 go.mod)" = 'module github.com/online111111/mcp-manager'
+          test -d cmd/mcp-manager
+          test ! -e cmd/mcp-hub
+          test ! -e MCP-Hub-Agent实施手册.md
+          test ! -e MCP-Hub-开发设计文档.md
+          if git grep -n -I 'online111111/mcp-hub' -- .; then
+            echo 'historical repository slug remains' >&2
+            exit 1
+          fi
+          if git grep -n -I 'mcp-hub' -- .; then
+            echo 'lowercase legacy product/binary name remains' >&2
+            exit 1
+          fi
+          if git grep -n -I '"mcp-manager/internal/' -- '*.go'; then
+            echo 'short module imports remain' >&2
+            exit 1
+          fi
+          grep -q 'MCP_MANAGER_ADMIN_TOKEN' internal/cli/admin_remote.go
+          grep -q 'MCP_HUB_ADMIN_TOKEN' internal/cli/env_compat.go
+          grep -q 'MCP_HUB_TOKEN' internal/cli/http_client.go
+
+      - name: Validate migrated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -count=1 -timeout 180s ./...
+          go test -race -count=1 -timeout 240s ./...
+          go vet ./...
+          python3 -m py_compile internal/admin/agent-skill/scripts/install_release.py
+          python3 internal/admin/agent-skill/scripts/install_release.py --help >/dev/null
+          git diff --check
+
+      - name: Commit finalized rename
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/finalize-rename.yml
+          git add -A
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'refactor: finalize MCP Manager repository migration [finalized rename]'
+          git push origin HEAD:chore/finalize-mcp-manager-rename
