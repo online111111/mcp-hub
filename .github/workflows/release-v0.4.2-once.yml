@@ -1,0 +1,97 @@
+name: Release v0.4.2 Once
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'internal/buildinfo/buildinfo.go'
+      - '.github/workflows/release-v0.4.2-once.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-v0.4.2
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.1'
+          cache: true
+
+      - name: Verify release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'Version   = "0.4.2"' internal/buildinfo/buildinfo.go
+          git fetch --tags --force
+          if git rev-parse -q --verify refs/tags/v0.4.2 >/dev/null; then
+            tag_sha="$(git rev-list -n1 v0.4.2)"
+            test "$tag_sha" = "$GITHUB_SHA"
+          fi
+          go test -count=1 -timeout 180s ./...
+          go vet ./...
+          (cd verification/sdkprobe && go test -count=1 -timeout 120s ./...)
+
+      - name: Build release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="0.4.2"
+          build_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          mkdir -p dist stage
+          for target in linux/amd64 linux/arm64 windows/amd64 windows/arm64 darwin/amd64 darwin/arm64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            name="mcp-manager-${version}-${goos}-${goarch}"
+            bin="mcp-manager"
+            if [ "$goos" = windows ]; then bin="mcp-manager.exe"; fi
+            rm -rf stage/*
+            CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath \
+              -ldflags="-s -w -X github.com/online111111/mcp-manager/internal/buildinfo.Version=${version} -X github.com/online111111/mcp-manager/internal/buildinfo.Commit=${GITHUB_SHA} -X github.com/online111111/mcp-manager/internal/buildinfo.BuildDate=${build_date}" \
+              -o "stage/${bin}" ./cmd/mcp-manager
+            cp README.md "stage/README.md"
+            if [ "$goos" = windows ]; then
+              cp scripts/windows/start-mcp-manager.cmd "stage/start-mcp-manager.cmd"
+              cp scripts/windows/start-mcp-manager.ps1 "stage/start-mcp-manager.ps1"
+              cp scripts/windows/README-WINDOWS.txt "stage/README-WINDOWS.txt"
+              (cd stage && zip -q "../dist/${name}.zip" "$bin" README.md start-mcp-manager.cmd start-mcp-manager.ps1 README-WINDOWS.txt)
+            else
+              tar -C stage -czf "dist/${name}.tar.gz" "$bin" README.md
+            fi
+          done
+          (cd dist && sha256sum mcp-manager-* > SHA256SUMS)
+
+      - name: Create release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git rev-parse -q --verify refs/tags/v0.4.2 >/dev/null; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git tag -a v0.4.2 "$GITHUB_SHA" -m 'MCP Manager v0.4.2'
+            git push origin refs/tags/v0.4.2
+          fi
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v0.4.2 >/dev/null 2>&1; then
+            echo 'Release v0.4.2 already exists.'
+            exit 0
+          fi
+          gh release create v0.4.2 --verify-tag --target "$GITHUB_SHA" --generate-notes dist/*
