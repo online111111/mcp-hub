@@ -1,4 +1,4 @@
-// Integrated smoke: real Hub binary, cookies, CSRF, CAS, persistence and Chromium.
+// Integrated smoke: real MCP Manager binary, cookies, CSRF, CAS, persistence and Chromium.
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
 
 const root = resolve(import.meta.dirname, '../../..');
-const dir = await mkdtemp(join(tmpdir(), 'mcp-hub-live-'));
+const dir = await mkdtemp(join(tmpdir(), 'mcp-manager-live-'));
 const allocator = createServer();
 await new Promise(r => allocator.listen(0, '127.0.0.1', r));
 const port = allocator.address().port;
@@ -19,7 +19,8 @@ const args = ['  padded  ', '', 'normal', 'line1\nline2', ''];
 const adminToken = 'live-smoke-admin-token-0000000000000001';
 const rotatedAdminToken = 'rotated-live-admin-token-00000000000001';
 await writeFile(configPath, JSON.stringify({version:1,hub:{listen:`127.0.0.1:${port}`,admin:{enabled:true,token:adminToken}},mcpServers:{original:{enabled:false,type:'stdio',command:'node',args,env:{API_KEY:'original-secret'}}}}));
-const child = spawn(process.env.MCP_HUB_BINARY || join(root, 'dist/mcp-hub'), ['serve','--config',configPath], {stdio:['ignore','pipe','pipe']});
+const binary = process.env.MCP_MANAGER_BINARY || process.env.MCP_HUB_BINARY || join(root, 'dist/mcp-manager');
+const child = spawn(binary, ['serve','--config',configPath], {stdio:['ignore','pipe','pipe']});
 let spawnError;
 child.on('error', error => { spawnError = error; });
 let logs=''; child.stdout.on('data',d=>logs+=d); child.stderr.on('data',d=>logs+=d);
@@ -28,9 +29,9 @@ try {
  const deadline=Date.now()+15000;
  while(true){
   if(spawnError) throw spawnError;
-  if(child.exitCode!==null) throw Error(`Hub exited: ${logs}`);
+  if(child.exitCode!==null) throw Error(`MCP Manager exited: ${logs}`);
   try{if((await fetch(`${origin}/healthz`)).ok)break;}catch{}
-  if(Date.now()>deadline)throw Error(`Hub readiness timeout: ${logs}`);
+  if(Date.now()>deadline)throw Error(`MCP Manager readiness timeout: ${logs}`);
   await new Promise(r=>setTimeout(r,100));
  }
  browser=await chromium.launch({headless:true});
@@ -69,7 +70,7 @@ try {
  await page.waitForFunction(()=>document.querySelector('#health').textContent==='需重启',null,{timeout:20000});
  assert.match(await page.locator('#healthDetail').textContent(),/认证|安全/);
  assert.deepEqual(errors,[]);
- console.log('PASS real Hub + Chromium: login cookie flags, edit/JSON argument roundtrip, secret preservation, duplicate replacement persisted, missing-CSRF rejection, no page errors');
+ console.log('PASS real MCP Manager + Chromium: auth, edit persistence, secret handling, CSRF rejection, restart-required state');
 } finally {
  await browser?.close();
  if(child.pid && child.exitCode===null){
