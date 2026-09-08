@@ -105,43 +105,47 @@ type ManagerCallback interface {
 
 // HTTPServerOptions holds configuration settings for the inbound HTTP server.
 type HTTPServerOptions struct {
-	Version        string
-	SessionTimeout time.Duration
-	MaxSessions    int
-	MaxBodySize    int64
-	PublicMode     bool
-	PublicURL      string
-	AllowedHosts   []string
-	TrustedProxies []string
-	BearerToken    string
-	AdminHandler   http.Handler
+	Version              string
+	SessionTimeout       time.Duration
+	MaxSessions          int
+	MaxBodySize          int64
+	PublicMode           bool
+	PublicURL            string
+	AllowedHosts         []string
+	TrustedProxies       []string
+	BearerToken          string
+	BearerTokens         []string
+	BearerTokensProvider func() []string
+	AdminHandler         http.Handler
 }
 
-// HTTPServer manages the public-facing HTTP endpoints for the MCP Hub.
+// HTTPServer manages the public-facing HTTP endpoints for MCP Manager.
 // It enforces safe loopback listener binding, strict Host/Origin checking,
 // body and session capacity limits, and route isolation.
 type HTTPServer struct {
-	listener       net.Listener
-	httpServer     *http.Server
-	publisher      *Publisher
-	manager        ManagerCallback
-	sdkHandler     *mcp.StreamableHTTPHandler
-	boundHost      string
-	boundPort      string
-	startTime      time.Time
-	version        string
-	maxSessions    int
-	maxBodySize    int64
-	initMu         sync.Mutex
-	closeOnce      sync.Once
-	closeErr       error
-	rootHandler    http.Handler
-	publicMode     bool
-	publicURL      string
-	allowedHosts   map[string]struct{}
-	trustedProxies []*net.IPNet
-	bearerToken    string
-	adminHandler   http.Handler
+	listener             net.Listener
+	httpServer           *http.Server
+	publisher            *Publisher
+	manager              ManagerCallback
+	sdkHandler           *mcp.StreamableHTTPHandler
+	boundHost            string
+	boundPort            string
+	startTime            time.Time
+	version              string
+	maxSessions          int
+	maxBodySize          int64
+	initMu               sync.Mutex
+	closeOnce            sync.Once
+	closeErr             error
+	rootHandler          http.Handler
+	publicMode           bool
+	publicURL            string
+	allowedHosts         map[string]struct{}
+	trustedProxies       []*net.IPNet
+	bearerToken          string
+	bearerTokens         []string
+	bearerTokensProvider func() []string
+	adminHandler         http.Handler
 }
 
 // NewHubServer creates an SDK Server instance configured with Hub server options (Tools.ListChanged=true).
@@ -265,14 +269,19 @@ func NewHTTPServer(listener net.Listener, publisher *Publisher, manager ManagerC
 		s.publicMode = opts.PublicMode
 		s.publicURL = strings.TrimRight(opts.PublicURL, "/")
 		s.bearerToken = opts.BearerToken
+		s.bearerTokens = append([]string(nil), opts.BearerTokens...)
+		if len(s.bearerTokens) == 0 && s.bearerToken != "" {
+			s.bearerTokens = []string{s.bearerToken}
+		}
+		s.bearerTokensProvider = opts.BearerTokensProvider
 		s.adminHandler = opts.AdminHandler
 		for _, allowed := range opts.AllowedHosts {
 			s.allowedHosts[strings.ToLower(strings.TrimSpace(allowed))] = struct{}{}
 		}
 		for _, raw := range opts.TrustedProxies {
-			_, network, err := net.ParseCIDR(raw)
-			if err != nil {
-				return nil, fmt.Errorf("invalid trusted proxy CIDR %q: %w", raw, err)
+			_, network, parseErr := net.ParseCIDR(raw)
+			if parseErr != nil {
+				return nil, fmt.Errorf("invalid trusted proxy CIDR %q: %w", raw, parseErr)
 			}
 			s.trustedProxies = append(s.trustedProxies, network)
 		}
@@ -384,14 +393,26 @@ func (s *HTTPServer) isHTTPSRequest(req *http.Request) bool {
 }
 
 func (s *HTTPServer) authorizedBearer(req *http.Request) bool {
-	if s.bearerToken == "" {
+	tokens := s.bearerTokens
+	if s.bearerTokensProvider != nil {
+		tokens = s.bearerTokensProvider()
+	}
+	if len(tokens) == 0 && s.bearerToken != "" {
+		tokens = []string{s.bearerToken}
+	}
+	if len(tokens) == 0 {
 		return !s.publicMode
 	}
 	auth := req.Header.Get("Authorization")
 	if !strings.HasPrefix(auth, "Bearer ") {
 		return false
 	}
-	return subtle.ConstantTimeCompare([]byte(strings.TrimPrefix(auth, "Bearer ")), []byte(s.bearerToken)) == 1
+	candidate := []byte(strings.TrimPrefix(auth, "Bearer "))
+	matched := 0
+	for _, token := range tokens {
+		matched |= subtle.ConstantTimeCompare(candidate, []byte(token))
+	}
+	return matched == 1
 }
 
 func (s *HTTPServer) isAllowedHost(hostHeader string) bool {
