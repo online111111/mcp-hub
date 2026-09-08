@@ -15,6 +15,7 @@ concurrency:
 jobs:
   test:
     name: ${{ matrix.os }} / Go ${{ matrix.go }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -100,38 +101,47 @@ jobs:
           node internal/admin/browsertest/live-smoke.mjs
       - name: Build MCP Manager
         run: go build -trimpath ./cmd/mcp-manager
-      - name: Windows PowerShell 5.1 launcher and token clipboard smoke
+      - name: Windows packaged CMD, PowerShell 5.1 and recovery regressions
         if: runner.os == 'Windows' && matrix.current
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force windows-package | Out-Null
           go build -trimpath -o windows-package/mcp-manager.exe ./cmd/mcp-manager
-          Copy-Item scripts/windows/start-mcp-manager.ps1 windows-package/start-mcp-manager.ps1
-          Copy-Item scripts/windows/start-mcp-manager.cmd windows-package/start-mcp-manager.cmd
-          Copy-Item scripts/windows/copy-admin-token.ps1 windows-package/copy-admin-token.ps1
-          Copy-Item scripts/windows/copy-admin-token.cmd windows-package/copy-admin-token.cmd
-          Remove-Item windows-package/config.json -Force -ErrorAction SilentlyContinue
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PWD\windows-package\start-mcp-manager.ps1" -NoBrowser -ExitAfterReady
-          if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell 5.1 launcher smoke failed with exit code $LASTEXITCODE" }
-          $bytes = [System.IO.File]::ReadAllBytes("$PWD\windows-package\config.json")
-          if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
-            throw 'Launcher generated config.json with a UTF-8 BOM'
-          }
-          $cfg = Get-Content "$PWD\windows-package\config.json" -Raw | ConvertFrom-Json
-          $expectedToken = [string]$cfg.hub.admin.token
-          if ([string]::IsNullOrWhiteSpace($expectedToken)) { throw 'Generated config does not contain an Admin Token' }
-          if ((Get-Clipboard -Raw).Trim() -ne $expectedToken) { throw 'First-run launcher did not copy the expected Admin Token to the clipboard' }
-          Set-Clipboard -Value 'sentinel'
-          powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PWD\windows-package\copy-admin-token.ps1"
-          if ($LASTEXITCODE -ne 0) { throw "Admin Token clipboard helper failed with exit code $LASTEXITCODE" }
-          if ((Get-Clipboard -Raw).Trim() -ne $expectedToken) { throw 'Admin Token helper did not copy the expected token to the clipboard' }
-          & "$PWD\windows-package\mcp-manager.exe" validate --config "$PWD\windows-package\config.json"
-          if ($LASTEXITCODE -ne 0) { throw "Packaged config validation failed with exit code $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed' }
+          Copy-Item scripts/windows/start-mcp-manager.* windows-package/
+          Copy-Item scripts/windows/copy-admin-token.* windows-package/
+          Copy-Item scripts/windows/README-WINDOWS.txt,README.md windows-package/
+          Compress-Archive -Path windows-package/* -DestinationPath windows-smoke.zip
+          $version = ((& windows-package/mcp-manager.exe version) -replace '^mcp-manager ', '').Trim()
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows/smoke.ps1 -ArchivePath "$PWD/windows-smoke.zip" -ExpectedVersion $version
+          if ($LASTEXITCODE -ne 0) { throw 'Windows packaged smoke failed' }
+      - name: Windows browser test dependencies
+        if: runner.os == 'Windows' && matrix.current
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - name: Windows Chromium and real API persistence
+        if: runner.os == 'Windows' && matrix.current
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Push-Location internal/admin/browsertest
+          npm ci
+          if ($LASTEXITCODE -ne 0) { throw 'npm ci failed' }
+          npx playwright install chromium
+          if ($LASTEXITCODE -ne 0) { throw 'Chromium installation failed' }
+          npm test
+          if ($LASTEXITCODE -ne 0) { throw 'Windows browser regressions failed' }
+          Pop-Location
+          $env:MCP_MANAGER_BINARY = "$PWD/windows-package/mcp-manager.exe"
+          node internal/admin/browsertest/live-smoke.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Windows real API smoke failed' }
 
   vulnerability-scan:
     name: Govulncheck / Go 1.27.1
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
