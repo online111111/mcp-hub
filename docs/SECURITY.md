@@ -1,128 +1,80 @@
-# MCP Hub security model
+# MCP Manager security model
 
-MCP Hub is a trusted personal gateway, not a sandbox or a multi-tenant security boundary. Configured stdio services execute with the Hub user's operating-system privileges, and remote MCP services are trusted peers from the Hub's perspective.
+MCP Manager is a trusted personal gateway, not a sandbox or multi-tenant security boundary. Configured stdio services execute with the Manager service user's OS privileges; remote MCP services are trusted peers from the Manager's perspective.
 
-## Inbound HTTP boundary
+## Inbound HTTP
 
-- Local mode is restricted to loopback (`127.0.0.1`, `localhost`, or `[::1]`).
-- Public mode must be enabled explicitly and satisfy HTTPS, Host, proxy, and authentication validation before startup.
-- MCP and diagnostic endpoints validate `Host`; the Hub does not trust `X-Forwarded-Host` as authority.
-- MCP and diagnostic endpoints reject browser `Origin` requests. The browser Admin surface has its own exact same-origin and CSRF policy.
-- Public MCP and diagnostic requests require the configured MCP bearer token. `/healthz` remains unauthenticated but still follows Host/HTTPS policy.
-- Request and response bodies are bounded. Stateful session admission and established-session POST reads have explicit limits/deadlines.
+- Local mode is loopback-only.
+- Public mode is explicit and must satisfy HTTPS, Host, proxy, and authentication policy before startup.
+- MCP/diagnostic endpoints validate `Host` and reject browser `Origin` requests; Browser Admin has its own strict same-origin + CSRF policy.
+- Public MCP/diagnostic requests require the MCP bearer token.
+- Request/response/session resources are bounded.
 
-For public hosting, keep the Hub on loopback and terminate TLS at a trusted local reverse proxy. Only proxy addresses listed in `trustedProxies` may establish HTTPS through `X-Forwarded-Proto`. Never add an untrusted public network to that list.
+For public hosting keep MCP Manager on loopback and terminate TLS at a trusted local proxy. Never place an untrusted public network in `trustedProxies`.
 
 ## Admin management plane
 
-The management plane has three supported clients:
+Supported management clients are:
 
-1. the browser console under `/admin/`;
-2. the `mcp-hub admin` remote CLI;
-3. trusted Agent automation that uses the same CLI/Admin API path.
+1. Browser Admin under `/admin/`;
+2. `mcp-manager admin` Remote Admin CLI;
+3. trusted Agent automation using the same CLI/Admin path.
 
-They all converge on the same authenticated Admin transaction path. There is no separate low-security remote-write API.
+They converge on the same authenticated transaction semantics: bounded sessions/rates, HttpOnly/SameSite cookies, Secure cookies under HTTPS, JSON-only mutation requests, CSRF, ETag/CAS, strict decoding, downstream preflight, atomic persistence, rollback, and redacted secret reads.
 
-Security properties include:
+Remote Admin additionally rejects redirects and non-loopback plaintext HTTP. See [REMOTE-ADMIN.md](REMOTE-ADMIN.md).
 
-- MCP and Admin tokens are distinct credentials;
-- public-mode tokens must satisfy the configured minimum length policy and must not be identical;
-- successful Admin login creates a bounded random server-side session;
-- cookies are `HttpOnly`, `SameSite=Strict`, and `Secure` whenever HTTPS is active;
-- login and authenticated Admin API traffic are rate-limited;
-- mutation requests require `application/json` and a synchronizer CSRF token;
-- configuration writes require the current ETag / compare-and-swap revision;
-- unknown/trailing JSON is rejected;
-- connection-changing server edits are preflighted before persistence;
-- persistence uses the shared config lock and atomic-write path;
-- failed transactions retain or restore the last healthy configuration/runtime state;
-- normal Admin reads use secret placeholders rather than returning existing secret values.
+## Credential names and rename compatibility
 
-The browser editor snapshots the ETag when it opens. A later background refresh cannot silently authorize a stale draft against a newer revision.
+New deployments use:
 
-The remote CLI also rejects redirects and non-loopback plaintext HTTP. See [REMOTE-ADMIN.md](REMOTE-ADMIN.md).
+- `MCP_MANAGER_TOKEN` for public MCP clients;
+- `MCP_MANAGER_ADMIN_TOKEN` for Admin access.
 
-## Configuration transaction safety
+The CLI accepts legacy `MCP_HUB_TOKEN` / `MCP_HUB_ADMIN_TOKEN` during the rename compatibility window. Existing config references to the legacy variables may remain. Do not expose, duplicate, or rotate secrets merely to change naming.
 
-Configuration on disk remains the persistent source of truth. File polling and Admin writes share one transaction domain.
+New and legacy auth values are never meant to be implicitly inherited by stdio children; explicit server `env` forwarding is an intentional operator trust decision.
 
-Important invariants:
+## Config transaction safety
 
-- request bodies are size-bounded;
-- Admin PUT network bodies are read before the shared config transaction lock is acquired, so a slow upload cannot stall unrelated runtime reload work;
-- raw config read, revision comparison, validation, mutation, persistence, and reload are serialized appropriately;
-- cross-process writes use an OS-backed advisory lock;
-- config replacement is atomic and durability-oriented;
-- stale ETags fail with a conflict instead of overwriting a concurrent administrator.
+Configuration on disk remains the persistent source of truth. File polling and Admin writes share one revision/transaction domain.
 
-Do not run a direct config-file editor concurrently with Browser/CLI Admin writes unless you intentionally accept conflict/reload behavior.
+- Admin bodies are bounded and read before taking the shared config transaction lock.
+- Current raw config and ETag/digest are verified before mutation.
+- Cross-process writes use OS-backed locking.
+- Replacement is atomic/durability-oriented.
+- Stale ETags fail as conflicts rather than silently overwriting concurrent changes.
+- Failed live apply restores the previous healthy persistence/runtime state.
 
 ## Secrets
 
-Prefer `${NAME}` references in configuration and inject the real value through the Hub service environment.
+Prefer `${NAME}` references and inject values through the Manager service environment. Expansion is one-pass, in-memory only, shell-free, and missing required variables fail validation.
 
-- Environment/header references are expanded only in memory.
-- Missing environment references fail validation rather than silently becoming empty strings.
-- Expansion is one-pass and does not execute a shell.
-- Import previews and Admin reads expose key names and secret placeholders, not existing values.
-- Status/recent-call diagnostics intentionally avoid returning commands, arguments, filesystem paths, environment values, request parameters, results, raw stacks, headers, or session credentials.
+Do not put long-lived secrets in Git, screenshots, PR text, shell history, process arguments, or support reports.
 
-Do not put long-lived secrets in Git, screenshots, PR text, shell history, service command-line arguments, or final support reports.
+## stdio execution
 
-## stdio environment and process execution
+stdio children receive a restricted compatibility environment, not the full Manager process environment. Ordinary commands execute directly with separate arguments. Explicitly configuring a shell opts into that shell's parsing/escaping risk.
 
-stdio children do **not** inherit the entire Hub process environment. They receive a compatibility allowlist, while additional values must be opted into explicitly through the server `env` map.
+POSIX uses process-group ownership; Windows uses a worker bootstrap plus Job Object lifecycle. These are process ownership controls, not sandbox guarantees.
 
-Hub authentication values such as `MCP_HUB_TOKEN` and `MCP_HUB_ADMIN_TOKEN` are not implicitly inherited by downstream children. If an operator explicitly forwards a value in server `env`, that is an intentional trust decision.
+## Downstream HTTP
 
-Ordinary commands use direct process execution with separate arguments, not shell interpolation. Explicitly configuring `cmd.exe`, `cmd`, PowerShell, `/bin/sh`, or another shell opts into that shell's parsing and escaping semantics.
-
-Process-tree ownership:
-
-- POSIX: downstreams run in process groups and cancellation/close escalates against the group;
-- Windows: a worker and Job Object with kill-on-close semantics manages the descendant tree.
-
-A program that deliberately escapes OS process ownership controls is outside the Hub's sandbox guarantee because MCP Hub is not a sandbox.
-
-## Downstream Streamable HTTP
-
-Remote non-loopback MCP targets require HTTPS.
-
-The downstream client:
-
-- rejects redirects;
-- validates target policy;
-- clones requests before adding configured headers;
-- prevents configured headers from replacing hop/session framing headers;
-- bounds response handling;
-- uses startup/call contexts instead of a short global timeout that would incorrectly kill a long-lived MCP connection.
-
-External transport/protocol errors are mapped to short categories. Avoid verbose production logging of raw downstream errors because they may contain private endpoint or credential-adjacent information.
+Remote non-loopback MCP targets require HTTPS. Redirects are rejected, configured headers cannot replace transport/session framing headers, and responses are bounded. Startup/call contexts are used instead of an unsafe short global timeout for long-lived MCP connections.
 
 ## Tool-call semantics
 
-Routing uses an explicit public-name -> server/original-name mapping. The Hub does not guess destinations from arbitrary names.
-
-Tool calls are not automatically replayed after timeout, cancellation, or transport failure. A timeout does not imply the downstream side effect was rolled back.
-
-Tool names and schemas are validated before publication. Disabled tools are filtered declaratively; newly discovered valid tools are otherwise published according to the configured policy.
+Routing uses explicit public-name -> server/original-name mappings. Calls are never automatically replayed after timeout, cancellation, or transport failure. A timeout does not mean a downstream side effect was undone.
 
 ## Public deployment checklist
 
-- Hub listens on loopback when practical.
-- Only 80/443 are public; do not expose 8080 directly.
-- TLS is terminated by a trusted proxy or by the Hub's validated HTTPS path.
-- `publicUrl`, `allowedHosts`, and `trustedProxies` are explicit.
-- MCP and Admin tokens are strong, distinct, and stored outside Git.
-- Hub runs as a dedicated non-root service account.
-- Config/env files have restrictive permissions (for example 0600 where applicable).
+- Manager listens on loopback where practical.
+- Only 80/443 are public; do not expose 8080.
+- HTTPS and trusted-proxy settings are explicit.
+- MCP/Admin credentials are strong and distinct.
+- Manager runs as a dedicated non-root account.
+- Config/env files use restrictive permissions.
 - Only trusted stdio commands and remote MCP endpoints are configured.
-- Upgrades run validation, `status`, and `doctor` before being considered complete.
+- Upgrades run validate, status, doctor, and rollback on failure.
 
-See [VPS.md](VPS.md) for the deployment baseline.
-
-## Evidence boundary
-
-The repository has automated security regression coverage for the implemented Host/Origin/auth/session/CSRF/config/redirect/secret/process boundaries and runs `govulncheck` in CI. This is not a claim that every reverse proxy, third-party MCP server, operating-system policy, or hostile local workload has been penetration-tested.
-
-Current verification boundaries are tracked in [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md).
+See [VPS.md](VPS.md) and [IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md) for operational/evidence boundaries.
