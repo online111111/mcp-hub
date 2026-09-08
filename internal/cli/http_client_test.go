@@ -42,12 +42,21 @@ func TestBearerTransportInjectsTokenWithoutMutatingRequest(t *testing.T) {
 	}
 }
 
-func TestHubTokenPrefersExplicitValue(t *testing.T) {
-	t.Setenv(hubTokenEnv, "from-env")
+func TestHubTokenPrefersExplicitAndManagerEnv(t *testing.T) {
+	t.Setenv(managerTokenEnv, "manager-env")
+	t.Setenv(legacyHubTokenEnv, "legacy-env")
 	if got := hubToken("from-flag"); got != "from-flag" {
 		t.Fatalf("hubToken() = %q", got)
 	}
-	if got := hubToken(""); got != "from-env" {
+	if got := hubToken(""); got != "manager-env" {
+		t.Fatalf("hubToken() = %q", got)
+	}
+}
+
+func TestHubTokenFallsBackToLegacyEnv(t *testing.T) {
+	t.Setenv(managerTokenEnv, "")
+	t.Setenv(legacyHubTokenEnv, "legacy-env")
+	if got := hubToken(""); got != "legacy-env" {
 		t.Fatalf("hubToken() = %q", got)
 	}
 }
