@@ -131,7 +131,7 @@ type ResolvedConfig struct {
 	Servers             map[string]ResolvedServer
 }
 
-// ResolvedServer represents the evaluated runtime configuration for a downstream server.
+// ResolvedServer represents the evaluated runtime configuration.
 type ResolvedServer struct {
 	ID      string
 	Enabled bool
@@ -151,7 +151,7 @@ type ResolvedServer struct {
 	DisabledTools map[string]struct{}
 
 	// Evaluated timeouts & concurrency
-	StartupTimeout string
+	StartupTimeout time.Duration
 	CallTimeout    time.Duration
 	MaxConcurrency int
 }
