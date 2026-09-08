@@ -215,6 +215,10 @@ mcp-manager-0.4.0-linux-amd64.tar.gz
 - [LINUX DO](https://linux.do/) —— MCP Manager 认可并支持 LINUX DO 社区。
 - [烧饼论坛（sb.sb）](https://sb.sb/) —— 欢迎交流 MCP Manager 使用、部署、问题反馈，以及 MCP / Agent 相关实践。
 
+## 开源许可
+
+MCP Manager 使用 [MIT License](LICENSE) 开源。
+
 ## 文档
 
 - [配置](docs/CONFIG.md)
