@@ -1,6 +1,8 @@
-# MCP Hub configuration
+# MCP Manager configuration
 
-MCP Hub reads one strict JSON configuration file. The file is the persistent source of truth; the Hub does not create a database or `state.json`.
+MCP Manager reads one strict JSON configuration file. The file is the persistent source of truth; there is no database or `state.json`.
+
+> Compatibility: the top-level object remains named `hub`. `hub.*` is a configuration schema contract and is intentionally **not** renamed to `manager.*` in v0.4.
 
 ## Minimal shape
 
@@ -23,143 +25,85 @@ MCP Hub reads one strict JSON configuration file. The file is the persistent sou
 }
 ```
 
-`enabled` defaults to `true`. `type` is required in saved configuration and is either `stdio` or `streamable_http`.
+`enabled` defaults to `true`; `type` is `stdio` or `streamable_http`.
 
-## stdio servers
+## stdio
 
-A stdio server requires `command`. It may also specify `args`, `cwd`, and `env`; it must not specify `url` or `headers`.
+stdio servers require `command` and may use `args`, `cwd`, and `env`. Arguments are passed without implicit shell interpolation.
 
-Relative `cwd` and command paths containing a path separator are resolved against the directory containing the configuration file. Arguments are passed as distinct process arguments without implicit shell parsing or rewriting.
-
-stdio children do **not** inherit the Hub process environment wholesale. The implicit compatibility baseline is limited to runtime discovery and operating-system essentials such as `PATH`, home/profile directories, temp directories, locale/timezone variables, common CA trust-store paths, and platform variables needed by common runtimes.
-
-Ambient credentials, proxy variables, SSH agent sockets, cloud-provider variables, and arbitrary Hub process variables are excluded by default.
-
-Use the server `env` map for explicit opt-in:
+Children do not inherit the Manager process environment wholesale. The implicit baseline is restricted to runtime/OS essentials; ambient credentials, proxy variables, SSH agent sockets, cloud credentials, and arbitrary service variables are excluded. Forward required values explicitly:
 
 ```json
-{
-  "env": {
-    "GITHUB_TOKEN": "${GITHUB_TOKEN}"
-  }
-}
+{"env":{"GITHUB_TOKEN":"${GITHUB_TOKEN}"}}
 ```
 
-Explicit values override the compatibility baseline. Hub MCP/Admin authentication values are additionally filtered from implicit inheritance as defense in depth.
+## Streamable HTTP
 
-## Streamable HTTP servers
-
-A `streamable_http` server requires `url`. It may specify `headers`, but not `command`, `args`, `cwd`, or `env`.
-
-Remote URLs require HTTPS. Plain HTTP is restricted to literal loopback hosts. URL userinfo and fragments are rejected. Redirects are not followed.
-
-Transport-owned or hop/session framing headers cannot be configured, including values such as `Host`, `Content-Length`, `Connection`, `Mcp-Session-Id`, and `Mcp-Protocol-Version`.
+Remote services require HTTPS; plaintext HTTP is limited to literal loopback targets. Redirects, URL credentials/fragments, and transport-owned framing headers are rejected.
 
 ## Environment expansion
 
-Header and stdio environment values support one-pass `${NAME}` expansion.
+- `${NAME}` resolves from the Manager process environment.
+- `$${NAME}` produces literal `${NAME}`.
+- Missing required variables fail validation.
+- Expansion does not write resolved secrets back to disk and does not invoke a shell.
 
-- `${NAME}` resolves from the Hub process environment;
-- `$${NAME}` produces literal `${NAME}`;
-- missing required variables fail validation;
-- expansion never writes resolved secrets back to disk;
-- expansion never invokes a shell.
+New public deployment examples use `${MCP_MANAGER_TOKEN}` and `${MCP_MANAGER_ADMIN_TOKEN}`. Existing configurations using `${MCP_HUB_TOKEN}` / `${MCP_HUB_ADMIN_TOKEN}` may remain unchanged during the rename migration because variable expansion is configuration-driven.
 
-Required public MCP and Admin tokens must remain non-empty after expansion, satisfy the configured minimum length policy, and differ from one another in public mode.
+## Limits
 
-## Timeouts and limits
+- config: 1 MiB maximum
+- configured servers: 32 maximum
+- `startupTimeout`: positive, max 24h, default `20s`
+- `callTimeout`: positive, max 24h, default `60s`
+- `maxConcurrency`: 1-64, default `8`, no waiting queue
+- `tools.disabled`: original downstream tool names
 
-- `startupTimeout`: positive duration, at most 24 hours; default `20s`.
-- `callTimeout`: positive duration, at most 24 hours; default `60s`.
-- `maxConcurrency`: integer 1-64; default `8`; there is no waiting queue.
-- Maximum config size: 1 MiB.
-- Maximum configured servers: 32.
-- `tools.disabled` contains original downstream tool names.
-- Valid newly discovered tools are otherwise publishable by default.
+## Reload semantics
 
-## Hot reload semantics
+Connection-level downstream changes use break-before-make generation replacement. Existing admitted calls stay on the generation from which they obtained a lease. A call-timeout-only change affects new calls without replacing the downstream generation.
 
-Connection-level downstream changes include command, args, cwd, env, URL, headers, transport, startup timeout, or concurrency.
-
-Those changes use break-before-make semantics: the old generation is drained/closed and the new generation connects before its new catalog becomes active.
-
-A call already admitted remains on the generation from which it obtained a lease.
-
-A call-timeout-only change affects new calls without requiring a downstream generation replacement.
-
-Startup-bound Hub settings require a process restart, including listener address, public mode/URL, allowed hosts, trusted proxies, MCP bearer token, Admin enablement/token, and Admin session timeout.
-
-A successful downstream hot reload does **not** imply startup-bound credentials have been revoked. When `restartRequired` is reported, restart the Hub to apply those settings fully.
+Listener/public-mode/auth/Admin settings are startup-bound. When `restartRequired` is reported, restart MCP Manager to fully apply those settings.
 
 ## Import
 
 ```bash
-mcp-hub import --from source.json --config config.json --dry-run
-mcp-hub import --from source.json --config config.json --yes
+mcp-manager import --from source.json --config config.json --dry-run
+mcp-manager import --from source.json --config config.json --yes
 ```
 
-Import handles common `mcpServers` files but does not start servers.
+Import does not start servers and does not silently convert legacy SSE into Streamable HTTP.
 
-A URL without an explicit type requires the supported remote-type choice; old `sse` input is not silently converted into Streamable HTTP.
+## Persistence and Admin transactions
 
-Import previews expose environment/header names rather than existing secret values. Overwriting an existing server ID is rejected unless the command explicitly supports and requests that behavior.
+Writes use bounded reads, restrictive same-directory temporary files, flush/sync, atomic replacement, parent-directory durability where supported, OS-backed locking, and digest/ETag conflict checks.
 
-## Persistence and concurrency
+Browser Admin and `mcp-manager admin` share one server-side transaction model:
 
-Configuration reads and digests are bounded by the 1 MiB limit.
+1. authenticate and check mutation preconditions;
+2. read the bounded request body before taking the config transaction lock;
+3. load current config and verify ETag/CAS;
+4. strict-decode and validate;
+5. preflight new/connection-changing enabled downstreams and their tool catalog;
+6. persist atomically;
+7. apply the validated runtime snapshot;
+8. roll back persistence/runtime if live apply fails.
 
-Writes use a same-directory temporary file with restrictive permissions, flush/sync, close, atomic replacement, and parent-directory durability sync where supported.
-
-An OS-backed advisory lock plus pre-write digest/ETag comparison prevents concurrent writers from silently overwriting a changed file.
-
-The file remains the persistent source of truth even when changes originate from Browser Admin or Remote Admin CLI.
-
-## Browser Admin and Remote Admin writes
-
-Browser Admin and `mcp-hub admin` both use the authenticated Admin API and the same configuration transaction model.
-
-For normal downstream CRUD, prefer those paths instead of bypassing them with direct file editing.
-
-Before persisting a new or connection-changed enabled downstream, the Hub:
-
-1. authenticates and checks mutation preconditions;
-2. reads the bounded request body;
-3. enters the shared configuration transaction;
-4. loads the current raw config and verifies ETag/CAS;
-5. strictly decodes and validates the mutation;
-6. creates an isolated temporary downstream session;
-7. lists and validates the discovered tool catalog;
-8. atomically persists the new config;
-9. applies the validated runtime snapshot;
-10. rolls back persistence and restores the previous runtime snapshot if the live apply fails.
-
-Network request bodies are read before the shared transaction lock is acquired so a slow client upload cannot stall unrelated runtime file-poll work.
-
-Remote CLI usage and `server.json` format are documented in [REMOTE-ADMIN.md](REMOTE-ADMIN.md).
-
-## External file edits
-
-The runtime controller observes configuration file changes and only applies validated snapshots.
-
-An invalid external edit leaves the last valid runtime configuration active and records the rejection in diagnostics.
-
-Direct file editing can still be appropriate for bootstrap, startup-bound Hub settings, or offline recovery, but do not concurrently bypass Browser/CLI Admin CAS unless you intentionally accept conflict/reload behavior.
+Direct file editing remains appropriate for bootstrap, startup-bound settings, or offline recovery, but normal downstream CRUD should prefer Browser/Remote Admin so validation, preflight, CAS, and rollback remain active.
 
 ## Validate and serve
 
 ```bash
-mcp-hub validate --config config.json
-mcp-hub serve --config config.json
+mcp-manager validate --config config.json
+mcp-manager serve --config config.json
 ```
 
-`validate` performs strict decoding, validation, environment expansion, and path resolution only. It does **not** start stdio processes or connect to remote downstreams.
+`validate` does not start downstream processes or network sessions.
 
-`serve` validates startup policy, binds the Hub listener, and then starts downstream runtime coordination.
+## Related
 
-## Related documentation
-
-- [Remote Admin CLI](REMOTE-ADMIN.md)
-- [Security model](SECURITY.md)
+- [Remote Admin](REMOTE-ADMIN.md)
+- [Security](SECURITY.md)
 - [Compatibility](COMPATIBILITY.md)
-- [VPS/public deployment](VPS.md)
+- [VPS deployment](VPS.md)
 - [Implementation status](IMPLEMENTATION-STATUS.md)
