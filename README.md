@@ -206,9 +206,10 @@ A `v*` tag builds:
 
 Assets use names such as `mcp-manager-0.4.0-linux-amd64.tar.gz`.
 
-## Community
+## Community & recognition
 
-For discussion, usage feedback, and sharing MCP / Agent setups, visit [烧饼论坛 (sb.sb)](https://sb.sb/).
+- [LINUX DO](https://linux.do/) — MCP Manager recognizes and supports the LINUX DO community.
+- [烧饼论坛 (sb.sb)](https://sb.sb/) — discussion, usage feedback, and sharing MCP / Agent setups.
 
 ## Documentation
 
