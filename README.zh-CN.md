@@ -1,8 +1,15 @@
 # MCP Manager
 
+[![Release](https://img.shields.io/github/v/release/online111111/mcp-manager?display_name=tag)](https://github.com/online111111/mcp-manager/releases/latest)
+[![CI](https://github.com/online111111/mcp-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/online111111/mcp-manager/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go&logoColor=white)](go.mod)
+
 [English](README.md) | **简体中文**
 
-**MCP Manager** 是一个轻量、自托管的 MCP 网关与管理控制台。下游 MCP 服务只配置一次，即可通过统一的 Streamable HTTP 入口提供给 IDE、Agent 和仅支持 stdio 的客户端。
+**MCP Manager** 是一个轻量、自托管的 **Model Context Protocol（MCP）网关、聚合器、代理与管理控制台**。本地 stdio 和远程 Streamable HTTP MCP 服务只配置一次，即可通过统一 `/mcp` 入口提供给 IDE、Coding Agent、AI 助手和仅支持 stdio 的客户端。
+
+**最新版本：** [下载 MCP Manager](https://github.com/online111111/mcp-manager/releases/latest) · Windows / Linux / macOS · amd64 / arm64
 
 > 兼容说明：v0.4.0 保留现有 JSON 配置结构以及 `/mcp`、`/admin` 路径，已有部署升级到当前 MCP Manager 二进制时不需要重写配置。
 
@@ -215,10 +222,6 @@ mcp-manager-0.4.0-linux-amd64.tar.gz
 - [LINUX DO](https://linux.do/) —— MCP Manager 认可并支持 LINUX DO 社区。
 - [烧饼论坛（sb.sb）](https://sb.sb/) —— 欢迎交流 MCP Manager 使用、部署、问题反馈，以及 MCP / Agent 相关实践。
 
-## 开源许可
-
-MCP Manager 使用 [MIT License](LICENSE) 开源。
-
 ## 文档
 
 - [配置](docs/CONFIG.md)
@@ -232,6 +235,9 @@ MCP Manager 使用 [MIT License](LICENSE) 开源。
 
 MCP Manager 是可信个人网关，**不是沙箱**。stdio 下游会以 Manager 服务用户的权限运行。建议使用专用非 root 用户，并且只配置你信任的 MCP 服务。
 
+## 开源许可
+
+MCP Manager 使用 [MIT License](LICENSE) 开源。
 
 ## Production operation / 长期运行
 
