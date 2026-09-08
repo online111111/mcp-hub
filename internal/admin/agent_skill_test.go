@@ -34,7 +34,7 @@ func TestAgentDeploymentAssetsRequireAuthAndDownload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if promptResp.StatusCode != http.StatusOK || !strings.Contains(string(prompt), "Deploy MCP Hub") {
+	if promptResp.StatusCode != http.StatusOK || !strings.Contains(string(prompt), "Deploy MCP Manager") {
 		t.Fatalf("unexpected agent prompt response %d: %s", promptResp.StatusCode, prompt)
 	}
 
@@ -63,10 +63,10 @@ func TestAgentDeploymentAssetsRequireAuthAndDownload(t *testing.T) {
 		files[file.Name] = true
 	}
 	for _, required := range []string{
-		"mcp-hub-deployer/SKILL.md",
-		"mcp-hub-deployer/agents/openai.yaml",
-		"mcp-hub-deployer/scripts/install_release.py",
-		"mcp-hub-deployer/assets/copy-paste-agent-prompt.md",
+		"mcp-manager-deployer/SKILL.md",
+		"mcp-manager-deployer/agents/openai.yaml",
+		"mcp-manager-deployer/scripts/install_release.py",
+		"mcp-manager-deployer/assets/copy-paste-agent-prompt.md",
 	} {
 		if !files[required] {
 			t.Fatalf("skill zip missing %s", required)
