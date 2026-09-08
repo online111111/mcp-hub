@@ -1,0 +1,53 @@
+name: Feature request
+description: Suggest an improvement or new capability
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the problem or workflow first, then the proposed behavior.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow
+      description: What are you trying to do, and what is difficult today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: What should MCP Manager do differently?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - MCP gateway / routing
+        - stdio downstreams
+        - Streamable HTTP downstreams
+        - Admin UI / Remote Admin
+        - Authentication / security
+        - Configuration / hot reload
+        - Windows launcher
+        - Deployment / packaging
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional. Describe workarounds or alternatives you have tried.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and pull requests for similar requests.
+          required: true
