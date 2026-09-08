@@ -128,3 +128,19 @@ mcp-manager serve --config config.json
 - [Security](SECURITY.md)
 - [Compatibility](COMPATIBILITY.md)
 - [VPS deployment](VPS.md)
+
+
+## v0.4.5 authentication and resource boundaries
+
+Configured MCP tokens are enforced in local mode as well as public mode. This
+includes `/readyz` and `/api/v1/status`; `/healthz` is exempt for liveness monitoring.
+Admin token deletion refuses the final MCP token to avoid silently disabling local
+authentication. Add a replacement, migrate clients, then remove the old token.
+An explicitly token-free local config remains supported for trusted single-user use.
+
+Admin JSON bodies are limited to one object, 1 MiB, exact field names and unique
+keys. Reads have deadlines; ETag/CSRF requirements remain unchanged. Downstream
+JSON responses, individual stdio lines and individual SSE events are limited to
+8 MiB. Tool discovery across pages is bounded to 4096 definitions and 8 MiB before
+catalog filtering; published limits remain 512 tools per server / 2048 total,
+256 KiB per final tool definition, and 8 MiB catalog accounting.

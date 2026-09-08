@@ -7,7 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"os"
+	"errors"
 	"path/filepath"
 	"reflect"
 	"sync"
@@ -49,7 +49,7 @@ func NewController(mgr *manager.Manager, configPath, currentListen string, load 
 		lastReload:    "initial configuration loaded",
 		load:          load,
 	}
-	if data, err := os.ReadFile(configPath); err == nil {
+	if data, err := config.ReadFileLimited(configPath); err == nil {
 		controller.appliedDigest = digest(data)
 		_, controller.startup, _ = config.Parse(data, filepath.Dir(configPath))
 	}
@@ -157,7 +157,7 @@ func (c *Controller) WithConfigTransaction(fn func(func(context.Context) error))
 }
 
 func (c *Controller) reloadNow(ctx context.Context) error {
-	data, err := os.ReadFile(c.configPath)
+	data, err := config.ReadFileLimited(c.configPath)
 	if err != nil {
 		c.reject("reload rejected: configuration unavailable")
 		return err
@@ -177,7 +177,7 @@ func (c *Controller) reloadNow(ctx context.Context) error {
 func (c *Controller) poll(ctx context.Context) {
 	c.transactionMu.Lock()
 	defer c.transactionMu.Unlock()
-	data, err := os.ReadFile(c.configPath)
+	data, err := config.ReadFileLimited(c.configPath)
 	if err != nil {
 		c.reject("reload rejected: configuration unavailable")
 		return
@@ -220,6 +220,17 @@ func (c *Controller) apply(ctx context.Context, resolved *config.ResolvedConfig,
 	}
 	if currentDigest != fileDigest {
 		return config.ErrDigestMismatch{Expected: fileDigest, Actual: currentDigest}
+	}
+
+	// The Admin credential remains startup-bound even when the file changes.
+	// Never hot-publish that still-active credential as an MCP access token.
+	if c.startup != nil && c.startup.AdminEnabled {
+		tokens := append([]string{resolved.BearerToken}, resolved.BearerTokens...)
+		for _, token := range tokens {
+			if token != "" && token == c.startup.AdminToken {
+				return errors.New("MCP token must differ from the active Admin credential; restart after changing Admin settings")
+			}
+		}
 	}
 
 	// Startup-bound Admin credentials remain active until the process is

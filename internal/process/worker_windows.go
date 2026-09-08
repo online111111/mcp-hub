@@ -42,7 +42,7 @@ func RunWorkerWithIO(stdin io.Reader, stdout io.Writer, stderr io.Writer) error 
 	// 2. Prepare downstream command.
 	cmd := exec.Command(msg.Command, msg.Args...)
 	cmd.Dir = msg.Dir
-	if len(msg.Env) > 0 {
+	if msg.Env != nil {
 		cmd.Env = msg.Env
 	}
 	cmd.Stderr = stderr

@@ -22,7 +22,7 @@ type BootstrapMessage struct {
 	Command string   `json:"command"`
 	Args    []string `json:"args,omitempty"`
 	Dir     string   `json:"dir,omitempty"`
-	Env     []string `json:"env,omitempty"`
+	Env     []string `json:"env"`
 }
 
 // WriteBootstrap serializes the BootstrapMessage as a single JSON line terminated by '\n'

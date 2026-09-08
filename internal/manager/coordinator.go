@@ -327,7 +327,11 @@ func (c *Coordinator) onToolListChanged() {
 }
 
 func (c *Coordinator) run() {
+	defer c.Stop()
 	for {
+		if c.ctx.Err() != nil {
+			return
+		}
 		c.mu.Lock()
 		if c.stopped {
 			c.mu.Unlock()
@@ -345,6 +349,10 @@ func (c *Coordinator) run() {
 
 func (c *Coordinator) handleDisabled() {
 	c.mu.Lock()
+	if c.stopped {
+		c.mu.Unlock()
+		return
+	}
 	c.state = StateDisabled
 	gen := c.currentGen
 	c.currentGen = nil
@@ -371,6 +379,10 @@ func (c *Coordinator) handleDisabled() {
 
 func (c *Coordinator) handleConnectingAndReady() {
 	c.mu.Lock()
+	if c.stopped || c.ctx.Err() != nil {
+		c.mu.Unlock()
+		return
+	}
 	c.state = StateConnecting
 	targetRev := c.desired.Revision
 	cfg := c.desired.ResolvedConfig
@@ -467,6 +479,9 @@ func (c *Coordinator) handleConnectingAndReady() {
 	c.cachedTools = tools
 	c.publishedCount = snap.PublishedCount(c.serverID)
 	c.state = StateReady
+	// Startup cancellation must no longer own a healthy session. Tool/filter
+	// and call-timeout edits are hot changes and must not cancel its lifetime.
+	c.operationCancel = nil
 	c.lastConnected = time.Now()
 	c.lastError = ""
 	c.everSucceeded = true
@@ -534,6 +549,7 @@ func (c *Coordinator) readyLoop(gen *Generation, sess Session) {
 				c.mu.Unlock()
 				gen.drain(c.drainTimeout)
 				_ = gen.Close()
+				c.handleConnectFailure(errors.New("downstream session closed"))
 				return
 			}
 		case <-c.ctx.Done():
@@ -590,6 +606,10 @@ func (c *Coordinator) refreshTools(gen *Generation, sess Session) error {
 
 func (c *Coordinator) handleConnectFailure(err error) {
 	c.mu.Lock()
+	if c.stopped || c.ctx.Err() != nil {
+		c.mu.Unlock()
+		return
+	}
 	c.consecutiveFail++
 	c.lastError = sanitizeError(err)
 	c.lastDisconnect = time.Now()
@@ -599,6 +619,10 @@ func (c *Coordinator) handleConnectFailure(err error) {
 
 	delay := c.computeBackoff(fails)
 	c.mu.Lock()
+	if c.stopped {
+		c.mu.Unlock()
+		return
+	}
 	c.state = StateBackoff
 	c.mu.Unlock()
 	select {
@@ -667,7 +691,7 @@ func mapsEqual(a, b map[string]string) bool {
 		return false
 	}
 	for k, v := range a {
-		if b[k] != v {
+		if other, exists := b[k]; !exists || other != v {
 			return false
 		}
 	}

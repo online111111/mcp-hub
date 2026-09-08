@@ -22,19 +22,19 @@ export function nonEmptyLines(value) {
 }
 
 export function collectKeyValues(entries) {
-  const result = {};
+  const entriesOut = [];
+  const seen = new Set();
   for (const entry of entries) {
     const key = String(entry.key ?? "").trim();
     if (!key) continue;
-    if (Object.hasOwn(result, key)) {
+    if (seen.has(key.toLowerCase())) {
       throw new Error(`名称“${key}”重复`);
     }
-    result[key] =
-      entry.preserveSecret && !entry.value
-        ? SECRET_SENTINEL
-        : String(entry.value ?? "");
+    seen.add(key.toLowerCase());
+    entriesOut.push([key, entry.preserveSecret && !entry.value
+      ? SECRET_SENTINEL : String(entry.value ?? "")]);
   }
-  return result;
+  return Object.fromEntries(entriesOut);
 }
 
 export function formatUptime(seconds) {

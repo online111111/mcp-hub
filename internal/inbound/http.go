@@ -346,7 +346,7 @@ func (s *HTTPServer) wrapSecurityMiddleware(next http.Handler) http.Handler {
 				http.Error(w, "Forbidden: Origin header is not allowed", http.StatusForbidden)
 				return
 			}
-			if s.publicMode && !s.authorizedBearer(req) && req.URL.Path != "/healthz" {
+			if req.URL.Path != "/healthz" && !s.authorizedBearer(req) {
 				w.Header().Set("WWW-Authenticate", `Bearer realm="mcp-manager"`)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
@@ -394,14 +394,16 @@ func (s *HTTPServer) isHTTPSRequest(req *http.Request) bool {
 
 func (s *HTTPServer) authorizedBearer(req *http.Request) bool {
 	tokens := s.bearerTokens
+	hasProvider := s.bearerTokensProvider != nil
 	if s.bearerTokensProvider != nil {
 		tokens = s.bearerTokensProvider()
 	} else if provider, ok := s.manager.(interface{ BearerTokens() []string }); ok {
+		hasProvider = true
 		// The runtime controller supplies the hot-reloaded token set. Keeping the
 		// dependency structural avoids expanding ManagerCallback just for auth.
 		tokens = provider.BearerTokens()
 	}
-	if len(tokens) == 0 && s.bearerToken != "" {
+	if !hasProvider && len(tokens) == 0 && s.bearerToken != "" {
 		tokens = []string{s.bearerToken}
 	}
 	if len(tokens) == 0 {

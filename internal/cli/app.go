@@ -135,6 +135,11 @@ func runServe(args []string, stdout, stderr io.Writer, stopCh <-chan struct{}) i
 		fmt.Fprintf(stderr, "failed to start downstream manager: %v\n", err)
 		return ExitInternalError
 	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = mgr.Stop(ctx)
+	}()
 	if err := mgr.Apply(mgrCtx, resolved); err != nil {
 		fmt.Fprintf(stderr, "failed to apply initial configuration: %v\n", err)
 		return ExitInternalError
@@ -143,6 +148,7 @@ func runServe(args []string, stdout, stderr io.Writer, stopCh <-chan struct{}) i
 	controller := hubruntime.NewController(mgr, *configPath, resolved.Listen, nil, resolved)
 	controller.Start(mgrCtx, time.Second)
 
+	startedAt := time.Now()
 	var adminHandler http.Handler
 	if resolved.AdminEnabled {
 		adminUI, adminErr := admin.New(admin.Options{
@@ -155,6 +161,7 @@ func runServe(args []string, stdout, stderr io.Writer, stopCh <-chan struct{}) i
 			Status: func() any {
 				return inbound.StatusDTO{
 					Version:          buildinfo.Version,
+					UptimeSeconds:    int64(time.Since(startedAt).Seconds()),
 					CatalogRevision:  publisher.Revision(),
 					RestartRequired:  controller.RestartRequired(),
 					LastReloadStatus: controller.LastReloadStatus(),
@@ -186,6 +193,7 @@ func runServe(args []string, stdout, stderr io.Writer, stopCh <-chan struct{}) i
 		return ExitInternalError
 	}
 
+	defer httpSrv.Close()
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(sigChan)
@@ -195,6 +203,8 @@ func runServe(args []string, stdout, stderr io.Writer, stopCh <-chan struct{}) i
 		select {
 		case <-sigChan:
 		case <-stopCh:
+		case <-mgrCtx.Done():
+			return
 		}
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

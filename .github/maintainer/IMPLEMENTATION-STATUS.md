@@ -1,6 +1,6 @@
 # MCP Manager implementation status
 
-Last updated: 2026-09-08 for the v0.4.0 release candidate after repository/module migration and documentation reorganization.
+Last updated: 2026-09-08 for the v0.4.5 production-hardening audit. See PRODUCTION-AUDIT.md for defects, regression coverage, and remaining operational limits. Release availability must be checked against GitHub Releases.
 
 Status values are `PASS`, `PARTIAL`, and `NOT_RUN`. `PASS` means the stated contract has direct automated/platform evidence; it is not universal certification of every client, downstream, proxy, or OS release.
 
@@ -21,7 +21,7 @@ Status values are `PASS`, `PARTIAL`, and `NOT_RUN`. `PASS` means the stated cont
 | Credential compatibility | PASS | `MCP_MANAGER_TOKEN` / `MCP_MANAGER_ADMIN_TOKEN` primary; historical `MCP_HUB_TOKEN` / `MCP_HUB_ADMIN_TOKEN` remain bounded runtime fallback |
 | Agent deployment assets | PASS | embedded `mcp-manager-deployer` Skill, authenticated ZIP, current prompt, installer targets `online111111/mcp-manager` |
 | CI / vulnerability gate | PASS | Linux/Windows/macOS × Go 1.25.8/1.27.1, current-Go race + SDK probe, Linux Chromium + real-Manager smoke, `govulncheck`, pinned Actions, repository identity checks |
-| Release packaging | PARTIAL | workflow builds six `mcp-manager-*` archives plus `SHA256SUMS`; formal `v0.4.0` Release is still pending |
+| Release packaging | PASS | v0.4.4 was released; canonical workflow builds six archives plus SHA256SUMS and gates future publication on final ZIP/native platform checks. This does not certify Windows ARM64 or every desktop policy. |
 | Branch protection / ruleset | PARTIAL | main currently lacks enforced protection/ruleset |
 | License | PARTIAL | no LICENSE selected yet; owner/legal decision remains pending |
 
@@ -31,7 +31,7 @@ Status values are `PASS`, `PARTIAL`, and `NOT_RUN`. `PASS` means the stated cont
 - repository: `online111111/mcp-manager`
 - Go module: `github.com/online111111/mcp-manager`
 - binary/CLI: `mcp-manager`
-- source version default: `0.4.0`
+- source version default: `0.4.5`
 - Go directive: `1.25.0`
 - CI: Go `1.25.8` and `1.27.1`
 - MCP Go SDK: `v1.7.0`

@@ -8,7 +8,7 @@ This file is the primary entry point for coding, review, deployment, and operati
 - Repository: `online111111/mcp-manager`
 - Go module: `github.com/online111111/mcp-manager`
 - Primary binary / CLI: `mcp-manager`
-- Current source version: `0.4.0` release candidate
+- Current source version: see `internal/buildinfo/buildinfo.go`; do not infer release availability from source version alone.
 - Go: 1.25+
 - MCP Go SDK: `github.com/modelcontextprotocol/go-sdk v1.7.0`
 
@@ -132,6 +132,8 @@ When touching Remote Admin, keep MCP/Admin credentials separate, reject unsafe r
 - Before merge, verify the final PR head SHA and final-head CI.
 - For stacked PRs, merge in dependency order and re-check each remaining base/diff/CI after every merge.
 - A green PR is not a formal release.
+- Release publication must depend on execution of the exact Windows ZIP through CMD and Windows PowerShell 5.1, not a separately rebuilt test binary.
+- Review `docs/PRODUCTION.md` and `.github/maintainer/PRODUCTION-AUDIT.md` for operational scope and evidence boundaries.
 - Formal releases must come from the intended exact `v*` tag and publish all expected `mcp-manager-*` archives plus `SHA256SUMS`.
 
 Report conclusions as evidence-bounded findings, e.g. “no known release-blocking issue was found in the audited and tested scope,” not as claims of absolute bug-freedom.

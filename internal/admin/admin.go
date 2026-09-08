@@ -145,7 +145,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.URL.Path = "/"
 		w.Header().Set("Cache-Control", "no-store")
 	} else {
-		w.Header().Set("Cache-Control", "public, max-age=3600")
+		w.Header().Set("Cache-Control", "no-cache")
 	}
 	// Go's platform MIME database is not consistent for JavaScript modules
 	// (notably, Windows may serve .mjs as text/plain). With nosniff enabled,
@@ -157,6 +157,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
+	// Limit slow mutation bodies without timing out long-lived MCP streams.
+	if isMutation(r.Method) {
+		rc := http.NewResponseController(w)
+		_ = rc.SetReadDeadline(time.Now().Add(15 * time.Second))
+		defer rc.SetReadDeadline(time.Time{})
+	}
 	if !h.validOrigin(r) {
 		http.Error(w, "invalid origin", http.StatusForbidden)
 		return
@@ -246,6 +252,11 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	mediaType, _, mediaErr := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if mediaErr != nil || mediaType != "application/json" {
+		http.Error(w, "application/json required", http.StatusUnsupportedMediaType)
 		return
 	}
 	ip := h.clientIP(r)
@@ -687,19 +698,11 @@ func decodeJSONBody(r *http.Request, target any) error {
 	if len(data) > maxAdminBodySize {
 		return errors.New("request body exceeds 1 MiB")
 	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(target); err != nil {
-		return err
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return errors.New("request body must be a JSON object")
 	}
-	var extra any
-	if err := dec.Decode(&extra); err != io.EOF {
-		if err == nil {
-			return errors.New("request body must contain exactly one JSON value")
-		}
-		return err
-	}
-	return nil
+	return config.DecodeStrict(data, target)
 }
 
 func matchETag(raw, digest string) bool {

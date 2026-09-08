@@ -38,6 +38,9 @@ async function setup(t, source) {
     if (!apiState.authenticated) return respond({}, 401);
     if (path.endsWith('/auth/me')) return respond({ csrfToken: 'csrf-test' });
     if (path.endsWith('/auth/logout') && apiState.failLogout) return respond({ error: 'logout unavailable' }, 503);
+    if (path.endsWith('/auth/logout')) { apiState.authenticated = false; return respond({ ok: true }); }
+    if (path.endsWith('/tokens')) return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({tokens:apiState.tokens || []}),headers:{ETag:apiState.tokenRevision || apiState.revision}});
+    if (path.endsWith('/status') && apiState.holdStatus) await new Promise(resolve => { apiState.releaseStatus = resolve; });
     if (path.endsWith('/config')) return respond({ mcpServers: { original: source } });
     if (path.endsWith('/status')) return apiState.failStatus ? respond({error: 'status unavailable'}, 503) : respond({ servers: [], recentCalls: [] });
     if (req.method() === 'PUT') {
@@ -192,4 +195,67 @@ test('editor saves against the revision it opened, not a later refresh', async t
   await page.locator('#saveServer').click();
   await page.waitForFunction(() => !document.querySelector('#editor').open);
   assert.equal(writes[0].headers['if-match'], '"revision-1"');
+});
+
+
+test('config and token revisions must match before refreshing editable state', async t => {
+  const {page, writes, apiState} = await setup(t, {type:'stdio',command:'node'});
+  apiState.revision = '"revision-2"';
+  apiState.tokenRevision = '"revision-1"';
+  await page.locator('#refreshTop').click();
+  await page.locator('.toast.error').waitFor();
+  await page.locator('[data-action="edit"]').click();
+  await page.locator('#saveServer').click();
+  await page.waitForFunction(() => !document.querySelector('#editor').open);
+  assert.equal(writes[0].headers['if-match'], '"revision-1"');
+});
+
+test('MCP secrets are masked across examples, copied only on demand, and wiped on logout', async t => {
+  const {page, apiState, errors} = await setup(t, {type:'stdio',command:'node'});
+  const secret = 'audit-mcp-token-000000000000000000000001';
+  apiState.tokens = [{index:0,token:secret,legacy:true}];
+  await page.locator('#refreshTop').click();
+  await page.waitForFunction(() => document.querySelector('#accessTokenValue').value.length > 0);
+  assert.equal((await page.locator('#httpAuthorization').textContent()).includes(secret), false);
+  assert.equal((await page.locator('#stdioCommand').textContent()).includes(secret), false);
+  assert.equal((await page.locator('#stdioCommand').textContent()).includes('--token'), false);
+  await page.context().grantPermissions(['clipboard-read','clipboard-write'], {origin});
+  await page.locator('[data-copy-target="httpAuthorization"]').click();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), `Authorization: Bearer ${secret}`);
+  await page.locator('#toggleAccessToken').click();
+  assert.equal((await page.locator('#httpAuthorization').textContent()).includes(secret), true);
+  await page.locator('#logout').click();
+  await page.locator('#login').waitFor({state:'visible'});
+  assert.equal(await page.locator('#accessTokenValue').inputValue(), '');
+  assert.equal((await page.content()).includes(secret), false);
+  assert.equal(await page.locator('#token').getAttribute('type'), 'password');
+  assert.deepEqual(errors, []);
+});
+
+test('late refresh response cannot restore credentials after logout', async t => {
+  const {page, apiState, errors} = await setup(t, {type:'stdio',command:'node'});
+  apiState.tokens = [{index:0,token:'late-token-00000000000000000000000001'}];
+  apiState.holdStatus = true;
+  await page.locator('#refreshTop').click();
+  for (let n = 0; n < 100 && !apiState.releaseStatus; n++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(typeof apiState.releaseStatus, 'function');
+  await page.locator('#logout').click();
+  await page.locator('#login').waitFor({state:'visible'});
+  apiState.releaseStatus();
+  await page.waitForTimeout(100);
+  assert.equal(await page.locator('#accessTokenValue').inputValue(), '');
+  assert.equal(await page.locator('#accessTokenSelect option').count(), 0);
+  assert.deepEqual(errors, []);
+});
+
+test('login clipboard access is an explicit user action with a normal login afterwards', async t => {
+  const {page} = await setup(t, {type:'stdio',command:'node'});
+  await page.locator('#logout').click();
+  await page.locator('#login').waitFor({state:'visible'});
+  await page.context().grantPermissions(['clipboard-read','clipboard-write'], {origin});
+  await page.evaluate(() => navigator.clipboard.writeText('admin-token'));
+  await page.locator('#pasteAdminToken').click();
+  await page.waitForFunction(() => document.querySelector('#token').value === 'admin-token');
+  await page.locator('#loginButton').click();
+  await page.locator('#app').waitFor({state:'visible'});
 });

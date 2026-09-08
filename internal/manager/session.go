@@ -66,7 +66,8 @@ func (f *DefaultSessionFactory) CreateSession(
 			launcher = process.Start
 		}
 
-		var envSlice []string
+		// A resolved empty environment is intentionally empty, not inherited.
+		envSlice := make([]string, 0, len(srv.Env))
 		for k, v := range srv.Env {
 			envSlice = append(envSlice, fmt.Sprintf("%s=%s", k, v))
 		}

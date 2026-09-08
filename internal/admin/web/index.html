@@ -36,6 +36,7 @@
             <span class="kicker">SECURE ADMIN</span>
             <h2>进入管理台</h2>
             <p>使用部署时设置的 Admin Token 登录。Token 只用于建立当前浏览器会话，不会保存在页面中。</p>
+            <p id="localTokenHint" class="hidden">Windows 首次启动成功复制密钥后，可直接粘贴登录；已有配置请双击安装目录中的 <code>copy-admin-token.cmd</code>。密钥不会通过未登录的网页接口提供。</p>
           </div>
           <form id="loginForm" class="login-form">
             <label class="field-label" for="token">Admin Token</label>
@@ -43,6 +44,7 @@
               <input id="token" type="password" autocomplete="current-password" placeholder="粘贴管理员 Token" required autofocus />
               <button id="togglePassword" class="inside-button" type="button">显示</button>
             </div>
+            <button id="pasteAdminToken" class="button secondary" type="button">从剪贴板粘贴密钥</button>
             <button id="loginButton" class="button primary large" type="submit">进入管理台</button>
             <p id="loginError" class="form-error" role="alert"></p>
           </form>
@@ -110,6 +112,7 @@
           <section id="connectSection" class="panel section-block">
             <div class="section-heading"><div><span class="kicker">CLIENT ACCESS</span><h2>客户端接入</h2><p>在这里管理 MCP 调用 Token，然后手动复制配置，或让当前客户端电脑上的 Agent 自动完成接入。</p></div></div>
 
+            <div id="mcpAuthWarning" class="notice info hidden"><strong>MCP 认证尚未启用</strong><span>无 Token 模式仅适用于受信本机。新增 MCP Token 后，客户端和诊断接口都必须携带有效凭证；健康探针 /healthz 除外。</span></div>
             <article class="access-token-panel">
               <div class="access-token-copy">
                 <span class="mini-label">MCP ACCESS TOKENS</span>
@@ -126,7 +129,7 @@
             <div class="connection-grid access-grid">
               <article class="connection-card"><div class="connection-title"><div><span class="mini-label">ENDPOINT</span><h3>Streamable HTTP</h3></div><button class="button tiny secondary copy-button" data-copy-target="mcpEndpoint" type="button">复制地址</button></div><code id="mcpEndpoint"></code><p>原生支持远程 MCP 的客户端优先使用这个 HTTPS Endpoint。</p></article>
               <article class="connection-card"><div class="connection-title"><div><span class="mini-label">AUTH</span><h3>Authorization Header</h3></div><button class="button tiny secondary copy-button" data-copy-target="httpAuthorization" type="button">复制 Header</button></div><code id="httpAuthorization"></code><p>选择上面的 Token 后自动生成。</p></article>
-              <article class="connection-card wide-card"><div class="connection-title"><div><span class="mini-label">STDIO FALLBACK</span><h3>stdio bridge</h3></div><button class="button tiny secondary copy-button" data-copy-target="stdioCommand" type="button">复制命令</button></div><code id="stdioCommand"></code><p>只支持本地 stdio MCP 的客户端可以通过本机 `mcp-manager` 桥接到远端。</p></article>
+              <article class="connection-card wide-card"><div class="connection-title"><div><span class="mini-label">STDIO FALLBACK</span><h3>stdio bridge</h3></div><button class="button tiny secondary copy-button" data-copy-target="stdioCommand" type="button">复制命令</button></div><code id="stdioCommand"></code><p>先在客户端进程环境中设置 MCP_MANAGER_TOKEN，再使用本机 mcp-manager 桥接。不要把密钥放进命令参数或截图。</p></article>
             </div>
 
             <div class="subsection-heading"><span class="kicker">AGENT ASSISTED SETUP</span><h3>让客户端 Agent 自动接入</h3><p>这里的 Agent 只配置你当前使用的客户端电脑，不会部署、升级或修改远端 MCP Manager 服务端。</p></div>
@@ -169,6 +172,6 @@
         <div class="dialog-actions"><button id="cancelEditor" class="button secondary" type="button">取消</button><button id="saveServer" class="button primary" type="submit">保存并热重载</button></div>
       </form>
     </dialog>
-    <script type="module" src="/admin/app.js?v=20260908-access"></script>
+    <script type="module" src="/admin/app.js?v=20260908-audit"></script>
   </body>
 </html>

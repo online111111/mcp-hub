@@ -17,6 +17,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/online111111/mcp-manager/internal/buildinfo"
 	"github.com/online111111/mcp-manager/internal/downstream"
+	"github.com/online111111/mcp-manager/internal/wirelimit"
 )
 
 var (
@@ -199,7 +200,7 @@ func RunWithOptions(ctx context.Context, opts Options) error {
 		defer connCancel()
 	}
 
-	hubSession, err := downstream.DialHTTP(connectCtx, downstream.HTTPOptions{
+	hubSession, err := downstream.DialHTTP(runCtx, downstream.HTTPOptions{
 		Endpoint:         b.opts.Endpoint,
 		Headers:          b.opts.Headers,
 		BaseRoundTripper: b.opts.BaseRoundTripper,
@@ -278,7 +279,7 @@ func RunWithOptions(ctx context.Context, opts Options) error {
 
 	// 7. Expose tools over Stdio / IO transport.
 	transport := &mcp.IOTransport{
-		Reader: toReadCloser(b.opts.Stdin),
+		Reader: wirelimit.New(toReadCloser(b.opts.Stdin), wirelimit.JSONLines),
 		Writer: toWriteCloser(b.opts.Stdout),
 	}
 

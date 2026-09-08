@@ -134,3 +134,17 @@ func TestBootstrap_MissingCommand(t *testing.T) {
 		t.Fatalf("expected error for missing command, got nil")
 	}
 }
+
+func TestBootstrapPreservesExplicitEmptyEnvironment(t *testing.T) {
+	var data bytes.Buffer
+	if err := WriteBootstrap(&data, &BootstrapMessage{Command: "server", Env: []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	message, _, err := ReadBootstrap(&data, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if message.Env == nil {
+		t.Fatal("empty environment became nil and would inherit parent credentials")
+	}
+}
