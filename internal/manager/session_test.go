@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"mcp-hub/internal/config"
-	"mcp-hub/internal/process"
+	"github.com/online111111/mcp-manager/internal/config"
+	"github.com/online111111/mcp-manager/internal/process"
 )
 
 type mockProcess struct {

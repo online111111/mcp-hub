@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"mcp-hub/internal/catalog"
+	"github.com/online111111/mcp-manager/internal/catalog"
 )
 
 var (

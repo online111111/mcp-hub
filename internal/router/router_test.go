@@ -12,7 +12,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"mcp-hub/internal/catalog"
+	"github.com/online111111/mcp-manager/internal/catalog"
 )
 
 // fakeRouteLookup implements RouteLookup for testing.

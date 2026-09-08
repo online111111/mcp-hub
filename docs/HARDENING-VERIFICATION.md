@@ -22,7 +22,7 @@ update passed:
 - JavaScript syntax/helper tests: PASS.
 - six Chromium DOM/module regressions with a stubbed API: PASS.
 - integrated Chromium smoke against a real local Hub: PASS.
-- `go build -trimpath ./cmd/mcp-hub`: PASS.
+- `go build -trimpath ./cmd/mcp-manager`: PASS.
 
 ### Windows
 
@@ -31,7 +31,7 @@ update passed:
 - `go vet ./...`: PASS.
 - independent `verification/sdkprobe` race test: PASS.
 - Windows Job Object/process-tree regressions, including context-cancel descendant cleanup: PASS as part of the root suite.
-- `go build -trimpath ./cmd/mcp-hub`: PASS.
+- `go build -trimpath ./cmd/mcp-manager`: PASS.
 
 The documentation-only commits after that run require the final PR-head CI to
 remain green before merge.

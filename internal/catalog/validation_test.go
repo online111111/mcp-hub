@@ -30,9 +30,9 @@ func TestValidateToolInputSchema(t *testing.T) {
 	toolValid := &mcp.Tool{
 		Name: "test_tool",
 		InputSchema: map[string]any{
-			"type": "object",
+			"type":       "object",
 			"properties": map[string]any{"path": map[string]any{"type": "string"}},
-			"required": []string{"path"},
+			"required":   []string{"path"},
 		},
 	}
 	if err := ValidateTool(toolValid); err != nil {
@@ -69,7 +69,7 @@ func TestValidateToolOutputSchema(t *testing.T) {
 		Name:        "test_tool",
 		InputSchema: map[string]any{"type": "object"},
 		OutputSchema: map[string]any{
-			"type": "object",
+			"type":       "object",
 			"properties": map[string]any{"result": map[string]any{"type": "string"}},
 		},
 	}
@@ -96,7 +96,7 @@ func TestToolCloningImmutability(t *testing.T) {
 		Name:        "orig_name",
 		Description: "Initial description",
 		InputSchema: map[string]any{
-			"type": "object",
+			"type":       "object",
 			"properties": map[string]any{"count": map[string]any{"type": "number"}},
 		},
 	}

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mcp-hub/internal/config"
+	"github.com/online111111/mcp-manager/internal/config"
 )
 
 func TestDecodeStrict_Valid(t *testing.T) {

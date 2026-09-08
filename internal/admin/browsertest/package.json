@@ -1,5 +1,5 @@
 {
-  "name": "mcp-hub-admin-browser-tests",
+  "name": "mcp-manager-admin-browser-tests",
   "private": true,
   "type": "module",
   "scripts": { "test": "node --test --test-concurrency=1 *.test.mjs" },

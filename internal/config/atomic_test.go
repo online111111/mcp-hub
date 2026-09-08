@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"mcp-hub/internal/config"
+	"github.com/online111111/mcp-manager/internal/config"
 )
 
 const lockHelperEnv = "MCP_HUB_LOCK_HELPER"

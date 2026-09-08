@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"mcp-hub/internal/config"
+	"github.com/online111111/mcp-manager/internal/config"
 )
 
 func TestExpandEnv_Success(t *testing.T) {

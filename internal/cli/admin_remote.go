@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"mcp-hub/internal/config"
-	"mcp-hub/internal/netpolicy"
+	"github.com/online111111/mcp-manager/internal/config"
+	"github.com/online111111/mcp-manager/internal/netpolicy"
 )
 
-const adminTokenEnv = "MCP_HUB_ADMIN_TOKEN"
+const adminTokenEnv = managerAdminTokenEnv
 
 type remoteAdminClient struct {
 	baseURL string
@@ -60,16 +60,16 @@ func runAdmin(args []string, stdout, stderr io.Writer) int {
 }
 
 func printAdminUsage(w io.Writer) {
-	fmt.Fprint(w, `Remote Admin - manage downstream MCP services on a Hub
+	fmt.Fprint(w, `Remote Admin - manage downstream MCP services on MCP Manager
 
 Usage:
-  mcp-hub admin list --endpoint <url> [--token <admin-token>] [--json]
-  mcp-hub admin get <id> --endpoint <url> [--token <admin-token>]
-  mcp-hub admin add <id> --file <server.json|-> --endpoint <url> [--token <admin-token>]
-  mcp-hub admin edit <id> --file <server.json|-> --endpoint <url> [--token <admin-token>]
-  mcp-hub admin delete <id> --endpoint <url> [--token <admin-token>] --yes
+  mcp-manager admin list --endpoint <url> [--token <admin-token>] [--json]
+  mcp-manager admin get <id> --endpoint <url> [--token <admin-token>]
+  mcp-manager admin add <id> --file <server.json|-> --endpoint <url> [--token <admin-token>]
+  mcp-manager admin edit <id> --file <server.json|-> --endpoint <url> [--token <admin-token>]
+  mcp-manager admin delete <id> --endpoint <url> [--token <admin-token>] --yes
 
-Admin token defaults to MCP_HUB_ADMIN_TOKEN. Remote endpoints require HTTPS;
+Admin token defaults to MCP_MANAGER_ADMIN_TOKEN. The legacy MCP_HUB_ADMIN_TOKEN is accepted during the v0.4 compatibility window. Remote endpoints require HTTPS;
 plain HTTP is allowed only for loopback/local development.
 `)
 }
@@ -82,7 +82,7 @@ type adminCommonFlags struct {
 func addAdminCommonFlags(fs *flag.FlagSet) *adminCommonFlags {
 	common := &adminCommonFlags{}
 	fs.StringVar(&common.endpoint, "endpoint", "http://127.0.0.1:8080", "Hub base URL")
-	fs.StringVar(&common.token, "token", "", "Admin token (or MCP_HUB_ADMIN_TOKEN)")
+	fs.StringVar(&common.token, "token", "", "Admin token (or MCP_MANAGER_ADMIN_TOKEN; legacy MCP_HUB_ADMIN_TOKEN is accepted)")
 	return common
 }
 
@@ -90,7 +90,7 @@ func (c *adminCommonFlags) resolvedToken() string {
 	if strings.TrimSpace(c.token) != "" {
 		return c.token
 	}
-	return os.Getenv(adminTokenEnv)
+	return adminTokenFromEnv()
 }
 
 func runAdminList(args []string, stdout, stderr io.Writer) int {

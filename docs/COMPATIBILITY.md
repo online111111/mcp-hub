@@ -27,7 +27,7 @@ stdio-only clients use:
 MCP_MANAGER_TOKEN='...' mcp-manager stdio --connect https://mcp.example.com/mcp
 ```
 
-During the rename compatibility window, `MCP_HUB_TOKEN` remains accepted by the CLI. New generated configurations use `MCP_MANAGER_TOKEN`.
+During the v0.4 compatibility window, `MCP_HUB_TOKEN` remains accepted by the CLI. New generated configurations use `MCP_MANAGER_TOKEN`.
 
 Use `mcp-manager export` for supported client formats rather than copying stale examples.
 
@@ -66,15 +66,18 @@ This is evidence for tested contracts, not universal certification of every MCP 
 
 Manual acceptance should record exact version/OS and verify initialize, `tools/list`, a normal call, tool-directory change behavior, and shutdown/reconnect behavior.
 
-## Rename compatibility
+## v0.4 compatibility contract
 
-The MCP Hub -> MCP Manager rename intentionally preserves the wire/config contract:
+The repository/product identity migration preserves the wire/config contract:
 
 - `/mcp`, `/admin/`, and `/api/...` paths do not change;
 - JSON `hub.*` fields do not change;
-- old `MCP_HUB_*` CLI token variables remain accepted during migration;
-- official new binary/Release naming is `mcp-manager`;
-- internal Go module path remains `mcp-hub` during v0.4 to avoid a repository-wide import rewrite unrelated to runtime compatibility.
+- `MCP_HUB_TOKEN` and `MCP_HUB_ADMIN_TOKEN` remain runtime fallbacks during the compatibility window;
+- the canonical binary/Release name is `mcp-manager`;
+- the canonical repository is `online111111/mcp-manager`;
+- the canonical Go module is `github.com/online111111/mcp-manager`.
+
+The old source entrypoint is removed; compatibility is intentionally limited to runtime configuration and credential aliases rather than maintaining duplicate source identities.
 
 ## Related
 

@@ -111,7 +111,7 @@ It intentionally does **not** change:
 - `/mcp`, `/admin/`, `/api/...` routes
 - JSON `hub.*` schema fields
 - current runtime semantics
-- internal Go module path `mcp-hub` during the low-risk v0.4 migration
+- internal Go module path `mcp-manager` during the low-risk v0.4 migration
 
 ## Protocol boundary
 

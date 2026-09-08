@@ -6,8 +6,8 @@ import (
 	"os"
 	"os/exec"
 
-	"mcp-hub/internal/cli"
-	managerprocess "mcp-hub/internal/process"
+	"github.com/online111111/mcp-manager/internal/cli"
+	managerprocess "github.com/online111111/mcp-manager/internal/process"
 )
 
 func main() {

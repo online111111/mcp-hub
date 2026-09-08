@@ -5,23 +5,23 @@
 1. Inspect OS/arch, current binary, config, service unit, listener, proxy, and firewall.
 2. Back up the current binary/config/environment/service/proxy files.
 3. Install `mcp-manager` from a verified Release or build it from source.
-4. Preserve existing JSON configuration. New examples use `MCP_MANAGER_TOKEN` and `MCP_MANAGER_ADMIN_TOKEN`; legacy `MCP_HUB_*` variables remain valid during migration.
+4. Preserve existing JSON configuration. New examples use `MCP_MANAGER_TOKEN` and `MCP_MANAGER_ADMIN_TOKEN`; legacy `MCP_HUB_*` variables remain valid during the v0.4 compatibility window.
 5. Run `mcp-manager validate --config <path>`.
 6. Start or restart the service and verify loopback `/healthz` and `/readyz`.
 7. If public access is needed, expose only 80/443 through Caddy/Nginx and keep Manager on loopback.
 8. Run `mcp-manager status` and `mcp-manager doctor`.
 
-## Existing MCP Hub migration
+## Existing pre-v0.4 deployment migration
 
-Treat this as an in-place product rename, not a new deployment:
+Treat this as an in-place compatibility upgrade, not a new deployment:
 
 - Keep the same config schema and `/mcp`/`/admin` URLs.
 - Preserve tokens unless the user explicitly requests rotation.
-- Install the new binary next to the old one or stage it as `.new`.
+- Install the `mcp-manager` binary next to the existing binary or stage it as `.new`.
 - Validate the existing config with the new binary before replacement.
-- Update the service command from `mcp-hub` to `mcp-manager` only after validation.
-- Keep a rollback copy of the old binary/service unit until post-restart checks pass.
-- Service names/directories may remain legacy names temporarily; rename them separately if operationally useful.
+- Update the service command to `mcp-manager` only after validation.
+- Keep a rollback copy of the previous binary/service unit until post-restart checks pass.
+- Service names/directories may remain historical names temporarily; rename them separately only when operationally useful.
 
 ## HTTP client
 

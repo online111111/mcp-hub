@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"mcp-hub/internal/buildinfo"
+	"github.com/online111111/mcp-manager/internal/buildinfo"
 )
 
 const (
@@ -338,7 +338,7 @@ func (s *HTTPServer) wrapSecurityMiddleware(next http.Handler) http.Handler {
 				return
 			}
 			if s.publicMode && !s.authorizedBearer(req) && req.URL.Path != "/healthz" {
-				w.Header().Set("WWW-Authenticate", `Bearer realm="mcp-hub"`)
+				w.Header().Set("WWW-Authenticate", `Bearer realm="mcp-manager"`)
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}

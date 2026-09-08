@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"mcp-hub/internal/catalog"
-	"mcp-hub/internal/config"
+	"github.com/online111111/mcp-manager/internal/catalog"
+	"github.com/online111111/mcp-manager/internal/config"
 )
 
 // fakeSession implements Session for manager testing.

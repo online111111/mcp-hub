@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"mcp-hub/internal/catalog"
-	"mcp-hub/internal/config"
-	"mcp-hub/internal/inbound"
-	"mcp-hub/internal/router"
+	"github.com/online111111/mcp-manager/internal/catalog"
+	"github.com/online111111/mcp-manager/internal/config"
+	"github.com/online111111/mcp-manager/internal/inbound"
+	"github.com/online111111/mcp-manager/internal/router"
 )
 
 const defaultDialConcurrency = 4

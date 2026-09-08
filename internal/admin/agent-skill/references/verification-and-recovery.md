@@ -2,7 +2,7 @@
 
 ## Verification gates
 
-After install, migration, config edit, or upgrade:
+After install, compatibility migration, config edit, or upgrade:
 
 1. `mcp-manager version`
 2. `mcp-manager validate --config <path>`
@@ -16,15 +16,15 @@ After install, migration, config edit, or upgrade:
 
 Do not treat a green local browser smoke test as proof of every reverse proxy, GUI client, or third-party MCP server combination.
 
-## Rename-specific verification
+## Compatibility-upgrade verification
 
-For MCP Hub -> MCP Manager migration, additionally verify:
+For an existing pre-v0.4 deployment, additionally verify:
 
-- the service now launches `mcp-manager` when the service file was renamed;
+- the service launches `mcp-manager` after its command is migrated;
 - existing `${MCP_HUB_TOKEN}` / `${MCP_HUB_ADMIN_TOKEN}` configurations still authenticate during the compatibility window;
 - newly generated client config uses `MCP_MANAGER_TOKEN` and the `mcp-manager` command;
 - `/mcp`, `/admin/`, and the existing config schema remain unchanged;
-- no old binary is deleted until the new binary passes health and client checks.
+- no previous binary is deleted until the new binary passes health and client checks.
 
 ## Recovery
 

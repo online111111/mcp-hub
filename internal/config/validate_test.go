@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"mcp-hub/internal/config"
+	"github.com/online111111/mcp-manager/internal/config"
 )
 
 func TestValidate_Version(t *testing.T) {

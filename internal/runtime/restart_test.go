@@ -3,7 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
-	"mcp-hub/internal/config"
+	"github.com/online111111/mcp-manager/internal/config"
 	"os"
 	"path/filepath"
 	"strings"

@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"mcp-hub/internal/catalog"
-	"mcp-hub/internal/config"
-	"mcp-hub/internal/router"
+	"github.com/online111111/mcp-manager/internal/catalog"
+	"github.com/online111111/mcp-manager/internal/config"
+	"github.com/online111111/mcp-manager/internal/router"
 )
 
 const (
@@ -23,10 +23,10 @@ const (
 )
 
 var (
-	ErrServerNotFound = router.ErrServerNotFound
-	ErrNotAdmitting = router.ErrServerUnavailable
+	ErrServerNotFound   = router.ErrServerNotFound
+	ErrNotAdmitting     = router.ErrServerUnavailable
 	ErrConcurrencyLimit = router.ErrServerBusy
-	ErrManagerStopped = errors.New("manager: already stopped")
+	ErrManagerStopped   = errors.New("manager: already stopped")
 )
 
 type DesiredServer struct {
@@ -78,8 +78,8 @@ func (l *Lease) Release() {
 }
 
 func (l *Lease) Session() router.Session { return l.gen.session }
-func (l *Lease) ServerID() string { return l.gen.serverID }
-func (l *Lease) GenerationID() uint64 { return l.gen.id }
+func (l *Lease) ServerID() string        { return l.gen.serverID }
+func (l *Lease) GenerationID() uint64    { return l.gen.id }
 
 func (l *Lease) CallTimeout() time.Duration {
 	if l == nil || l.gen == nil {
@@ -126,18 +126,18 @@ func newGeneration(
 		maxConcurrency = config.DefaultMaxConcurrency
 	}
 	return &Generation{
-		id: id,
-		serverID: serverID,
-		revision: revision,
-		session: session,
-		processCloser: processCloser,
+		id:             id,
+		serverID:       serverID,
+		revision:       revision,
+		session:        session,
+		processCloser:  processCloser,
 		maxConcurrency: maxConcurrency,
-		callTimeout: callTimeout,
-		ctx: ctx,
-		cancel: cancel,
-		admission: true,
-		active: 0,
-		drainCh: make(chan struct{}, 1),
+		callTimeout:    callTimeout,
+		ctx:            ctx,
+		cancel:         cancel,
+		admission:      true,
+		active:         0,
+		drainCh:        make(chan struct{}, 1),
 	}
 }
 

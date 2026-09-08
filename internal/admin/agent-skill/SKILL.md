@@ -1,6 +1,6 @@
 ---
 name: mcp-manager-deployer
-description: Deploy, configure, upgrade, repair, verify, or remove MCP Manager for server-side hosting or client-side access. Use when an agent needs to install online111111/mcp-manager (or migrate an existing online111111/mcp-hub installation), deploy it to Linux/macOS/Windows or a VPS, expose it safely through HTTPS, configure downstream MCP services, connect HTTP or stdio-only clients, use Remote Admin, upgrade an existing installation, or recover a broken deployment.
+description: Deploy, configure, upgrade, repair, verify, or remove MCP Manager for server-side hosting or client-side access. Use when an agent needs to install online111111/mcp-manager, deploy it to Linux/macOS/Windows or a VPS, expose it safely through HTTPS, configure downstream MCP services, connect HTTP or stdio-only clients, use Remote Admin, upgrade an existing installation, or recover a broken deployment.
 ---
 
 # MCP Manager Deployer
@@ -14,7 +14,7 @@ Deploy and maintain MCP Manager as a repeatable, verified operation. Treat exist
 - Use `scripts/install_release.py` when Python 3 is available.
 - Never expose port `8080` directly to the public Internet. Prefer loopback MCP Manager plus a trusted HTTPS reverse proxy.
 - Use separate MCP and Admin tokens of at least 32 characters. Never print token values in the final report.
-- New deployments use `MCP_MANAGER_TOKEN` and `MCP_MANAGER_ADMIN_TOKEN`. Existing `MCP_HUB_TOKEN` and `MCP_HUB_ADMIN_TOKEN` installations are legacy-compatible during the rename migration; do not rotate them merely to rename the product.
+- New deployments use `MCP_MANAGER_TOKEN` and `MCP_MANAGER_ADMIN_TOKEN`. Existing deployments that still use `MCP_HUB_TOKEN` or `MCP_HUB_ADMIN_TOKEN` remain runtime-compatible during the v0.4 transition; do not rotate credentials solely to rename variables.
 - Run persistent server deployments as a dedicated non-root account unless the user requires another model.
 - Back up an existing binary, config, environment file, service unit, and reverse-proxy snippet before mutation.
 - Run `mcp-manager validate` before restart; run `status` and `doctor` after changes. Roll back if a previously healthy deployment becomes unhealthy.
@@ -94,16 +94,16 @@ Remote Admin reuses the authenticated Admin session, CSRF protection, ETag/CAS c
 - Do not silently convert legacy SSE endpoints to Streamable HTTP.
 - Remember that stdio downstreams execute with the MCP Manager service user's privileges; this product is not a sandbox.
 
-## Rename migration
+## Compatibility migration
 
-When upgrading an existing MCP Hub installation to MCP Manager:
+When upgrading an existing pre-v0.4 deployment:
 
-1. Back up the old binary/config/service files.
+1. Back up the existing binary/config/service files.
 2. Keep the existing JSON schema and `/mcp`/`/admin` endpoints; they do not need migration.
-3. Install the new `mcp-manager` binary alongside or atomically replace the old binary after validation.
+3. Install the `mcp-manager` binary alongside or atomically replace the existing binary after validation.
 4. Existing `MCP_HUB_*` token variables may remain during the compatibility window. Prefer `MCP_MANAGER_*` for newly written service files.
 5. Rename service names/directories only when operationally useful; do not break a working deployment just for cosmetics.
-6. Verify with the new binary before removing any old compatibility artifact.
+6. Verify with the current binary before removing any compatibility artifact.
 
 ## Upgrade and rollback
 

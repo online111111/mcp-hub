@@ -3,9 +3,11 @@
 - 文档版本：0.4
 - 产品阶段：v0.4.0 release candidate
 - 当前实现：Go 1.25+，MCP Go SDK v1.7.0
+- 仓库：`online111111/mcp-manager`
+- Go module：`github.com/online111111/mcp-manager`
 - 产品定位：轻量、自托管的 MCP 网关、下游服务管理器与 Admin 控制台
 
-本文描述当前 **MCP Manager** 实现。产品原名 MCP Hub；旧名称只在兼容配置、内部 module path 和历史证据中保留。
+本文描述当前 **MCP Manager** 实现。仓库、module、正式二进制、Release 资产和 Agent Skill 已统一采用 MCP Manager 身份；历史环境变量与 `hub.*` 配置对象仅作为明确的运行时兼容契约保留。
 
 ## 产品目标
 
@@ -23,25 +25,28 @@
 
 不宣称：通用 resources/prompts/sampling/roots/elicitation/task 扩展代理、完整原生 MCP 2026-07-28 覆盖、多租户/RBAC/计费、沙箱、所有第三方客户端/服务的兼容认证、自动重放可能产生副作用的工具调用。
 
-## 产品改名契约
+## 稳定兼容契约
 
-v0.4 改名会改变：
+v0.4 的公开身份统一为：
 
 - 产品名：MCP Manager
-- 正式 CLI/二进制：`mcp-manager`
+- 仓库：`online111111/mcp-manager`
+- Go module：`github.com/online111111/mcp-manager`
+- CLI/二进制：`mcp-manager`
 - 新环境变量：`MCP_MANAGER_TOKEN`、`MCP_MANAGER_ADMIN_TOKEN`
 - Release 资产前缀：`mcp-manager-`
 - Skill：`mcp-manager-deployer`
 
-不会改变：
+仍保持兼容：
 
 - `/mcp`、`/admin/`、`/api/...`
 - JSON `hub.*` schema
 - 下游运行时/路由语义
 - Admin 安全事务语义
-- 现有配置中的旧环境变量引用
+- `MCP_HUB_TOKEN`、`MCP_HUB_ADMIN_TOKEN` 运行时回退
+- 现有配置中的环境变量引用
 
-兼容期 CLI 仍接受 `MCP_HUB_TOKEN` / `MCP_HUB_ADMIN_TOKEN`。内部 Go module path 在 v0.4 暂时保持 `mcp-hub`，将内部 import 重写与产品改名风险隔离。
+旧源码 CLI 入口不再保留。CI 会验证 canonical module path，并阻止旧仓库 slug、旧二进制名和旧公开产品名重新进入当前代码树。
 
 ## 核心架构
 
@@ -108,7 +113,7 @@ node --check internal/admin/web/app.js
 node --test internal/admin/webtest/*.test.mjs
 ```
 
-CI 覆盖 Linux/Windows/macOS、Go 1.25.8/1.27.1、race、SDK probe、Chromium、real-Manager smoke、govulncheck。
+CI 覆盖 Linux/Windows/macOS、Go 1.25.8/1.27.1、race、SDK probe、Chromium、real-Manager smoke、govulncheck，以及仓库身份回归检查。
 
 ## Release
 

@@ -17,12 +17,12 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"mcp-hub/internal/admin"
-	"mcp-hub/internal/bridge"
-	"mcp-hub/internal/buildinfo"
-	"mcp-hub/internal/inbound"
-	"mcp-hub/internal/manager"
-	hubruntime "mcp-hub/internal/runtime"
+	"github.com/online111111/mcp-manager/internal/admin"
+	"github.com/online111111/mcp-manager/internal/bridge"
+	"github.com/online111111/mcp-manager/internal/buildinfo"
+	"github.com/online111111/mcp-manager/internal/inbound"
+	"github.com/online111111/mcp-manager/internal/manager"
+	hubruntime "github.com/online111111/mcp-manager/internal/runtime"
 )
 
 // Exit codes per contract:

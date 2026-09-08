@@ -7,9 +7,9 @@ import (
 	"io"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"mcp-hub/internal/config"
-	"mcp-hub/internal/downstream"
-	"mcp-hub/internal/process"
+	"github.com/online111111/mcp-manager/internal/config"
+	"github.com/online111111/mcp-manager/internal/downstream"
+	"github.com/online111111/mcp-manager/internal/process"
 )
 
 // Session abstracts the downstream client session.

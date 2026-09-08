@@ -45,7 +45,7 @@ jobs:
             if [ "$goos" = windows ]; then bin="mcp-manager.exe"; fi
             rm -rf stage/*
             CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" go build -trimpath \
-              -ldflags="-s -w -X mcp-hub/internal/buildinfo.Version=${version} -X mcp-hub/internal/buildinfo.Commit=${GITHUB_SHA} -X mcp-hub/internal/buildinfo.BuildDate=${build_date}" \
+              -ldflags="-s -w -X github.com/online111111/mcp-manager/internal/buildinfo.Version=${version} -X github.com/online111111/mcp-manager/internal/buildinfo.Commit=${GITHUB_SHA} -X github.com/online111111/mcp-manager/internal/buildinfo.BuildDate=${build_date}" \
               -o "stage/${bin}" ./cmd/mcp-manager
             cp README.md "stage/README.md"
             if [ "$goos" = windows ]; then

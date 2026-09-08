@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-	"mcp-hub/internal/buildinfo"
-	"mcp-hub/internal/catalog"
+	"github.com/online111111/mcp-manager/internal/buildinfo"
+	"github.com/online111111/mcp-manager/internal/catalog"
 )
 
 // Session wraps an official MCP SDK ClientSession with lifecycle management,
