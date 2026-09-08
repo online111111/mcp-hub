@@ -100,7 +100,7 @@ jobs:
           node internal/admin/browsertest/live-smoke.mjs
       - name: Build MCP Manager
         run: go build -trimpath ./cmd/mcp-manager
-      - name: Windows PowerShell 5.1 launcher smoke
+      - name: Windows PowerShell 5.1 launcher and token clipboard smoke
         if: runner.os == 'Windows' && matrix.current
         shell: pwsh
         run: |
@@ -109,6 +109,8 @@ jobs:
           go build -trimpath -o windows-package/mcp-manager.exe ./cmd/mcp-manager
           Copy-Item scripts/windows/start-mcp-manager.ps1 windows-package/start-mcp-manager.ps1
           Copy-Item scripts/windows/start-mcp-manager.cmd windows-package/start-mcp-manager.cmd
+          Copy-Item scripts/windows/copy-admin-token.ps1 windows-package/copy-admin-token.ps1
+          Copy-Item scripts/windows/copy-admin-token.cmd windows-package/copy-admin-token.cmd
           Remove-Item windows-package/config.json -Force -ErrorAction SilentlyContinue
           powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PWD\windows-package\start-mcp-manager.ps1" -NoBrowser -ExitAfterReady
           if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell 5.1 launcher smoke failed with exit code $LASTEXITCODE" }
@@ -116,6 +118,14 @@ jobs:
           if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
             throw 'Launcher generated config.json with a UTF-8 BOM'
           }
+          $cfg = Get-Content "$PWD\windows-package\config.json" -Raw | ConvertFrom-Json
+          $expectedToken = [string]$cfg.hub.admin.token
+          if ([string]::IsNullOrWhiteSpace($expectedToken)) { throw 'Generated config does not contain an Admin Token' }
+          if ((Get-Clipboard -Raw).Trim() -ne $expectedToken) { throw 'First-run launcher did not copy the expected Admin Token to the clipboard' }
+          Set-Clipboard -Value 'sentinel'
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$PWD\windows-package\copy-admin-token.ps1"
+          if ($LASTEXITCODE -ne 0) { throw "Admin Token clipboard helper failed with exit code $LASTEXITCODE" }
+          if ((Get-Clipboard -Raw).Trim() -ne $expectedToken) { throw 'Admin Token helper did not copy the expected token to the clipboard' }
           & "$PWD\windows-package\mcp-manager.exe" validate --config "$PWD\windows-package\config.json"
           if ($LASTEXITCODE -ne 0) { throw "Packaged config validation failed with exit code $LASTEXITCODE" }
 
