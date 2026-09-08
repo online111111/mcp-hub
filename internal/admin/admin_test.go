@@ -201,7 +201,7 @@ func TestEmbeddedAdminPage(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/admin/", nil)
 	resp := httptest.NewRecorder()
 	h.ServeHTTP(resp, req)
-	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), "MCP Hub") {
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), "MCP Manager") {
 		t.Fatalf("unexpected page response %d: %s", resp.Code, resp.Body.String())
 	}
 	if resp.Header().Get("Content-Security-Policy") == "" {
