@@ -46,6 +46,22 @@ jobs:
         with:
           go-version: ${{ matrix.go }}
           cache: true
+      - name: Repository identity checks
+        if: runner.os == 'Linux' && matrix.current
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(head -n 1 go.mod)" = 'module github.com/online111111/mcp-manager'
+          test -d cmd/mcp-manager
+          test ! -e cmd/mcp-hub
+          if git grep -n -I 'online111111/mcp-hub' -- .; then
+            echo 'historical repository slug remains' >&2
+            exit 1
+          fi
+          if git grep -n -I 'mcp-hub' -- .; then
+            echo 'lowercase legacy product/binary name remains' >&2
+            exit 1
+          fi
       - name: Set up Node
         if: runner.os == 'Linux' && matrix.current
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -84,8 +100,6 @@ jobs:
           node internal/admin/browsertest/live-smoke.mjs
       - name: Build MCP Manager
         run: go build -trimpath ./cmd/mcp-manager
-      - name: Build legacy entrypoint
-        run: go build -trimpath ./cmd/mcp-hub
 
   vulnerability-scan:
     name: Govulncheck / Go 1.27.1
