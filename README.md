@@ -211,6 +211,10 @@ Assets use names such as `mcp-manager-0.4.0-linux-amd64.tar.gz`.
 - [LINUX DO](https://linux.do/) — MCP Manager recognizes and supports the LINUX DO community.
 - [烧饼论坛 (sb.sb)](https://sb.sb/) — discussion, usage feedback, and sharing MCP / Agent setups.
 
+## License
+
+MCP Manager is released under the [MIT License](LICENSE).
+
 ## Documentation
 
 - [Configuration](docs/CONFIG.md)
