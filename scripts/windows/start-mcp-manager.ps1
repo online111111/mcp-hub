@@ -1,8 +1,22 @@
+param(
+    [switch]$NoBrowser,
+    [switch]$ExitAfterReady
+)
+
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
 $exe = Join-Path $PSScriptRoot 'mcp-manager.exe'
 $config = Join-Path $PSScriptRoot 'config.json'
+
+function Write-Utf8NoBom {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Content
+    )
+    $encoding = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $Content, $encoding)
+}
 
 if (-not (Test-Path $exe)) {
     throw 'mcp-manager.exe was not found next to the launcher.'
@@ -28,16 +42,29 @@ if (-not (Test-Path $config)) {
         }
         mcpServers = [ordered]@{}
     }
-    $cfg | ConvertTo-Json -Depth 8 | Set-Content -Encoding UTF8 $config
-    Write-Host 'Created config.json with a random local Admin token.'
+    Write-Utf8NoBom -Path $config -Content ($cfg | ConvertTo-Json -Depth 8)
+    Write-Host 'Created config.json with a random local Admin token (UTF-8 without BOM).'
+} else {
+    $bytes = [System.IO.File]::ReadAllBytes($config)
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        $text = [System.Text.Encoding]::UTF8.GetString($bytes, 3, $bytes.Length - 3)
+        Write-Utf8NoBom -Path $config -Content $text
+        Write-Host 'Normalized existing config.json from UTF-8 BOM to UTF-8 without BOM.'
+    }
+}
+
+& $exe validate --config $config
+if ($LASTEXITCODE -ne 0) {
+    throw "Configuration validation failed with exit code $LASTEXITCODE."
 }
 
 Write-Host 'Starting MCP Manager...'
-$process = Start-Process -FilePath $exe -ArgumentList @('serve', '--config', $config) -PassThru -NoNewWindow
+$quotedConfig = '"' + $config + '"'
+$process = Start-Process -FilePath $exe -ArgumentList @('serve', '--config', $quotedConfig) -PassThru -NoNewWindow
 
 try {
     $ready = $false
-    for ($i = 0; $i -lt 50; $i++) {
+    for ($i = 0; $i -lt 100; $i++) {
         if ($process.HasExited) {
             throw "MCP Manager exited during startup with code $($process.ExitCode)."
         }
@@ -52,11 +79,27 @@ try {
     }
 
     if (-not $ready) {
-        throw 'MCP Manager did not become ready within 5 seconds.'
+        throw 'MCP Manager did not become ready within 10 seconds.'
     }
 
-    Write-Host 'Opening Admin UI: http://127.0.0.1:8080/admin/'
-    Start-Process 'http://127.0.0.1:8080/admin/'
+    $admin = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8080/admin/' -TimeoutSec 2
+    if ($admin.StatusCode -ne 200) {
+        throw "Admin UI returned HTTP $($admin.StatusCode)."
+    }
+
+    if ($ExitAfterReady) {
+        Write-Host 'Windows launcher smoke test passed.'
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        exit 0
+    }
+
+    if (-not $NoBrowser) {
+        Write-Host 'Opening Admin UI: http://127.0.0.1:8080/admin/'
+        Start-Process 'http://127.0.0.1:8080/admin/'
+    } else {
+        Write-Host 'Admin UI: http://127.0.0.1:8080/admin/'
+    }
+
     Wait-Process -Id $process.Id
     exit $process.ExitCode
 } catch {

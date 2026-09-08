@@ -28,6 +28,17 @@ func TestDecodeStrict_Valid(t *testing.T) {
 	}
 }
 
+func TestDecodeStrict_UTF8BOM(t *testing.T) {
+	data := append([]byte{0xEF, 0xBB, 0xBF}, []byte(`{"version":1,"mcpServers":{}}`)...)
+	var cfg config.Config
+	if err := config.DecodeStrict(data, &cfg); err != nil {
+		t.Fatalf("expected UTF-8 BOM config to decode, got %v", err)
+	}
+	if cfg.Version != 1 {
+		t.Fatalf("expected version 1, got %d", cfg.Version)
+	}
+}
+
 func TestDecodeStrict_DuplicateKey(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "config", "duplicate_key.json"))
 	if err != nil {

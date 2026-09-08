@@ -9,7 +9,8 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  build:
+    name: Build release archives
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -58,8 +59,66 @@ jobs:
             fi
           done
           (cd dist && sha256sum mcp-manager-* > SHA256SUMS)
+      - name: Upload release archives for verification
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-dist
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+
+  verify-windows:
+    name: Verify final Windows amd64 ZIP
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - name: Download exact release archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-dist
+          path: dist
+      - name: Extract and run packaged Windows release
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '${{ github.ref_name }}'.Substring(1)
+          $zip = Join-Path $PWD "dist\mcp-manager-$version-windows-amd64.zip"
+          if (-not (Test-Path $zip)) { throw "Missing Windows amd64 release archive: $zip" }
+          $extract = Join-Path $PWD 'windows-release-smoke'
+          Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -Path $zip -DestinationPath $extract
+          foreach ($required in @('mcp-manager.exe','start-mcp-manager.cmd','start-mcp-manager.ps1','README-WINDOWS.txt')) {
+            if (-not (Test-Path (Join-Path $extract $required))) { throw "Release ZIP is missing $required" }
+          }
+          Push-Location $extract
+          try {
+            .\mcp-manager.exe version
+            if ($LASTEXITCODE -ne 0) { throw "Packaged binary version command failed with exit code $LASTEXITCODE" }
+            Remove-Item .\config.json -Force -ErrorAction SilentlyContinue
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start-mcp-manager.ps1 -NoBrowser -ExitAfterReady
+            if ($LASTEXITCODE -ne 0) { throw "Packaged Windows launcher failed under Windows PowerShell 5.1 with exit code $LASTEXITCODE" }
+            $bytes = [System.IO.File]::ReadAllBytes((Join-Path $PWD 'config.json'))
+            if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+              throw 'Packaged launcher generated config.json with a UTF-8 BOM'
+            }
+            .\mcp-manager.exe validate --config .\config.json
+            if ($LASTEXITCODE -ne 0) { throw "Packaged config validation failed with exit code $LASTEXITCODE" }
+          } finally {
+            Pop-Location
+          }
+
+  publish:
+    name: Publish GitHub release
+    needs: verify-windows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified release archives
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-dist
+          path: dist
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
-        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes dist/*
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes dist/*
