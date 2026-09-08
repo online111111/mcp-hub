@@ -85,5 +85,4 @@ The old source entrypoint is removed; compatibility is intentionally limited to 
 - [Security](SECURITY.md)
 - [VPS deployment](VPS.md)
 - [Remote Admin](REMOTE-ADMIN.md)
-- [Implementation status](IMPLEMENTATION-STATUS.md)
 - [SDK probe](../verification/sdkprobe/README.md)
