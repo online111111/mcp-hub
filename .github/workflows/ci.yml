@@ -54,15 +54,15 @@ jobs:
           test "$(head -n 1 go.mod)" = 'module github.com/online111111/mcp-manager'
           test -d cmd/mcp-manager
           test ! -e cmd/mcp-hub
-          if git grep -n -I 'online111111/mcp-hub' -- .; then
+          if git grep -n -I 'online111111/mcp-hub' -- . ':!.github/workflows/ci.yml'; then
             echo 'historical repository slug remains' >&2
             exit 1
           fi
-          if git grep -n -I 'mcp-hub' -- .; then
+          if git grep -n -I 'mcp-hub' -- . ':!.github/workflows/ci.yml'; then
             echo 'lowercase legacy product/binary name remains' >&2
             exit 1
           fi
-          if git grep -n -I 'MCP Hub' -- .; then
+          if git grep -n -I 'MCP Hub' -- . ':!.github/workflows/ci.yml'; then
             echo 'stale public product name remains' >&2
             exit 1
           fi
