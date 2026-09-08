@@ -52,8 +52,10 @@ jobs:
             if [ "$goos" = windows ]; then
               cp scripts/windows/start-mcp-manager.cmd "stage/start-mcp-manager.cmd"
               cp scripts/windows/start-mcp-manager.ps1 "stage/start-mcp-manager.ps1"
+              cp scripts/windows/copy-admin-token.cmd "stage/copy-admin-token.cmd"
+              cp scripts/windows/copy-admin-token.ps1 "stage/copy-admin-token.ps1"
               cp scripts/windows/README-WINDOWS.txt "stage/README-WINDOWS.txt"
-              (cd stage && zip -q "../dist/${name}.zip" "$bin" README.md start-mcp-manager.cmd start-mcp-manager.ps1 README-WINDOWS.txt)
+              (cd stage && zip -q "../dist/${name}.zip" "$bin" README.md start-mcp-manager.cmd start-mcp-manager.ps1 copy-admin-token.cmd copy-admin-token.ps1 README-WINDOWS.txt)
             else
               tar -C stage -czf "dist/${name}.tar.gz" "$bin" README.md
             fi
@@ -87,7 +89,7 @@ jobs:
           $extract = Join-Path $PWD 'windows-release-smoke'
           Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive -Path $zip -DestinationPath $extract
-          foreach ($required in @('mcp-manager.exe','start-mcp-manager.cmd','start-mcp-manager.ps1','README-WINDOWS.txt')) {
+          foreach ($required in @('mcp-manager.exe','start-mcp-manager.cmd','start-mcp-manager.ps1','copy-admin-token.cmd','copy-admin-token.ps1','README-WINDOWS.txt')) {
             if (-not (Test-Path (Join-Path $extract $required))) { throw "Release ZIP is missing $required" }
           }
           Push-Location $extract
@@ -101,6 +103,14 @@ jobs:
             if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
               throw 'Packaged launcher generated config.json with a UTF-8 BOM'
             }
+            $cfg = Get-Content .\config.json -Raw | ConvertFrom-Json
+            $expectedToken = [string]$cfg.hub.admin.token
+            if ([string]::IsNullOrWhiteSpace($expectedToken)) { throw 'Packaged config does not contain the local Admin Token' }
+            if ((Get-Clipboard -Raw).Trim() -ne $expectedToken) { throw 'First-run launcher did not copy the expected Admin Token to the clipboard' }
+            Set-Clipboard -Value 'sentinel'
+            powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\copy-admin-token.ps1
+            if ($LASTEXITCODE -ne 0) { throw "Packaged Admin Token helper failed with exit code $LASTEXITCODE" }
+            if ((Get-Clipboard -Raw).Trim() -ne $expectedToken) { throw 'Admin Token helper did not copy the expected token to the clipboard' }
             .\mcp-manager.exe validate --config .\config.json
             if ($LASTEXITCODE -ne 0) { throw "Packaged config validation failed with exit code $LASTEXITCODE" }
           } finally {

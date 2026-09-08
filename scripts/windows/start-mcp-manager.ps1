@@ -18,10 +18,23 @@ function Write-Utf8NoBom {
     [System.IO.File]::WriteAllText($Path, $Content, $encoding)
 }
 
+function Try-CopyAdminToken {
+    param([Parameter(Mandatory = $true)][string]$Token)
+    try {
+        Set-Clipboard -Value $Token
+        Write-Host 'Admin Token copied to the Windows clipboard. Paste it into the Admin login page.'
+        return $true
+    } catch {
+        Write-Warning 'Could not access the Windows clipboard. Run copy-admin-token.cmd later, or read hub.admin.token from config.json.'
+        return $false
+    }
+}
+
 if (-not (Test-Path $exe)) {
     throw 'mcp-manager.exe was not found next to the launcher.'
 }
 
+$createdConfig = $false
 if (-not (Test-Path $config)) {
     Write-Host 'First run: creating a local-only MCP Manager configuration...'
     $token = [guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')
@@ -43,7 +56,9 @@ if (-not (Test-Path $config)) {
         mcpServers = [ordered]@{}
     }
     Write-Utf8NoBom -Path $config -Content ($cfg | ConvertTo-Json -Depth 8)
+    $createdConfig = $true
     Write-Host 'Created config.json with a random local Admin token (UTF-8 without BOM).'
+    [void](Try-CopyAdminToken -Token $token)
 } else {
     $bytes = [System.IO.File]::ReadAllBytes($config)
     if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
@@ -91,6 +106,10 @@ try {
         Write-Host 'Windows launcher smoke test passed.'
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
         exit 0
+    }
+
+    if ($createdConfig) {
+        Write-Host 'First-run Admin Token is in your clipboard. If needed later, double-click copy-admin-token.cmd.'
     }
 
     if (-not $NoBrowser) {
