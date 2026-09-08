@@ -16,8 +16,15 @@ var (
 	ErrEmptyConfig        = errors.New("configuration data is empty")
 )
 
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
+func stripUTF8BOM(data []byte) []byte {
+	return bytes.TrimPrefix(data, utf8BOM)
+}
+
 // CheckDuplicateKeys scans JSON tokens to detect duplicate keys in objects at any nesting level.
 func CheckDuplicateKeys(data []byte) error {
+	data = stripUTF8BOM(data)
 	if len(bytes.TrimSpace(data)) == 0 {
 		return ErrEmptyConfig
 	}
@@ -115,13 +122,12 @@ func validateJSONShape(value any, t reflect.Type, path string) error {
 	case reflect.Struct:
 		obj, ok := value.(map[string]any)
 		if !ok {
-			// Let the real decoder report the type mismatch with its normal error.
 			return nil
 		}
 		fields := make(map[string]reflect.Type)
 		for i := 0; i < t.NumField(); i++ {
 			f := t.Field(i)
-			if f.PkgPath != "" { // unexported
+			if f.PkgPath != "" {
 				continue
 			}
 			tag := f.Tag.Get("json")
@@ -175,10 +181,12 @@ func validateJSONShape(value any, t reflect.Type, path string) error {
 // 3. Exact, case-sensitive field-name matching
 // 4. Unknown field rejection
 // 5. Trailing data rejection (must end at EOF)
+// A single leading UTF-8 BOM is accepted for Windows/editor compatibility.
 func DecodeStrict(data []byte, v any) error {
 	if len(data) > MaxConfigFileSize {
 		return ErrConfigFileTooLarge
 	}
+	data = stripUTF8BOM(data)
 	if err := CheckDuplicateKeys(data); err != nil {
 		return fmt.Errorf("duplicate key check failed: %w", err)
 	}
