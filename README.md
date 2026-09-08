@@ -4,7 +4,7 @@
 
 **MCP Manager** is a lightweight self-hosted MCP gateway and management console. Configure downstream MCP services once, then expose one managed Streamable HTTP endpoint to IDEs, agents, and stdio-only clients.
 
-> Rename note: MCP Manager is the new product name of **MCP Hub**. The v0.4.0 release candidate keeps the existing JSON schema and `/mcp`/`/admin` endpoints so current deployments can migrate without rewriting their configuration.
+> Compatibility note: v0.4.0 keeps the existing JSON schema and `/mcp`/`/admin` endpoints so existing deployments can adopt the current MCP Manager binary without rewriting their configuration.
 
 ## What it provides
 
@@ -16,7 +16,7 @@
 - Stable public tool names and no automatic replay of potentially side-effecting calls.
 - Loopback-safe local mode plus an explicit authenticated HTTPS public mode.
 - stdio bridge for clients that cannot connect to HTTP MCP endpoints.
-- Embedded `mcp-manager-deployer` Skill and copy-paste Agent prompt for deployment, migration, upgrades, verification, and recovery.
+- Embedded `mcp-manager-deployer` Skill and copy-paste Agent prompt for deployment, upgrades, verification, and recovery.
 
 The production module uses `github.com/modelcontextprotocol/go-sdk v1.7.0`. That dependency version does **not** mean MCP Manager claims complete/native support for every MCP 2026-07-28 feature; see [compatibility](docs/COMPATIBILITY.md).
 
@@ -53,7 +53,7 @@ MCP_MANAGER_TOKEN=...
 MCP_MANAGER_ADMIN_TOKEN=...
 ```
 
-For the rename compatibility window, the CLI continues to accept the historical `MCP_HUB_TOKEN` and `MCP_HUB_ADMIN_TOKEN`. New generated examples and exports use the `MCP_MANAGER_*` names. Existing deployments do not need to rotate credentials merely to adopt the new product name.
+For the v0.4 compatibility window, the CLI also accepts the historical `MCP_HUB_TOKEN` and `MCP_HUB_ADMIN_TOKEN`. New generated examples and exports use the `MCP_MANAGER_*` names. Existing deployments do not need to rotate credentials merely to upgrade.
 
 ## Client access
 
@@ -93,7 +93,7 @@ Remote mutations use the same authenticated Admin management plane as the browse
 
 ## Configuration
 
-The configuration schema deliberately retains the `hub` object during the product rename:
+The configuration schema deliberately retains the `hub` object as a compatibility contract:
 
 ```json
 {
@@ -126,20 +126,20 @@ Internet -> HTTPS Caddy/Nginx -> 127.0.0.1:8080 MCP Manager
 
 Public mode requires an HTTPS `publicUrl`, explicit `allowedHosts`, trusted proxy CIDRs, and distinct MCP/Admin credentials of at least 32 characters each. Never expose port 8080 directly to the Internet. See [VPS deployment](docs/VPS.md) and [security](docs/SECURITY.md).
 
-## MCP Hub -> MCP Manager migration
+## Legacy deployment migration
 
-The rename is designed to avoid a flag day:
+The v0.4 migration avoids a flag day:
 
 1. Back up the existing binary, config, environment file, service unit, and proxy config.
-2. Install/stage the `mcp-manager` binary.
+2. Install or stage the `mcp-manager` binary.
 3. Validate the existing config with `mcp-manager validate`; the schema and endpoints are unchanged.
 4. Existing `MCP_HUB_*` variables may remain during the compatibility window; use `MCP_MANAGER_*` for newly written deployments.
 5. Change the service command to `mcp-manager` only after validation.
-6. Run `status`, `doctor`, Admin login, and a representative client check before deleting the old binary.
+6. Run `status`, `doctor`, Admin login, and a representative client check before deleting the previous binary.
 
-The legacy `cmd/mcp-manager` source entrypoint is still built in CI during this transition. Official v0.4 release archives use the `mcp-manager` binary name.
+The legacy source entrypoint has been removed. Official v0.4 release archives use only the `mcp-manager` binary name.
 
-The internal Go module path remains `mcp-manager` for the v0.4 rename to avoid a high-risk repository-wide import rewrite. It is an implementation detail, not the public binary/product identity. A module-path migration can be evaluated separately after the product rename is stable.
+The Go module path now matches the renamed repository: `github.com/online111111/mcp-manager`. Internal imports use that canonical path.
 
 ## Development and verification
 
@@ -152,7 +152,7 @@ node --test internal/admin/webtest/*.test.mjs
 go build -trimpath -o dist/mcp-manager ./cmd/mcp-manager
 ```
 
-GitHub Actions covers Linux, Windows, and macOS on the compatibility/current Go matrix. Current-Go jobs run race tests and the independent SDK probe; Linux additionally runs Chromium regressions and a real-MCP-Manager browser smoke test. CI also runs `govulncheck`.
+GitHub Actions covers Linux, Windows, and macOS on the compatibility/current Go matrix. Current-Go jobs run race tests and the independent SDK probe; Linux additionally runs Chromium regressions and a real-MCP-Manager browser smoke test. CI also runs `govulncheck` and repository-identity checks that reject stale public naming and repository paths.
 
 ## Release packaging
 
