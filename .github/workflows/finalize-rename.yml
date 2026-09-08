@@ -51,8 +51,6 @@ jobs:
               if text != original:
                   path.write_text(text, encoding='utf-8')
 
-          # Make the new Admin token name primary while preserving the old env
-          # variable as an explicit, bounded compatibility fallback.
           env_compat = Path('internal/cli/env_compat.go')
           env_compat.write_text('''package cli\n\nimport (\n\t"os"\n\t"strings"\n)\n\nconst (\n\tmanagerAdminTokenEnv = "MCP_MANAGER_ADMIN_TOKEN"\n\tlegacyAdminTokenEnv  = "MCP_HUB_ADMIN_TOKEN"\n)\n\nfunc adminTokenFromEnv() string {\n\tif token := strings.TrimSpace(os.Getenv(managerAdminTokenEnv)); token != "" {\n\t\treturn token\n\t}\n\treturn strings.TrimSpace(os.Getenv(legacyAdminTokenEnv))\n}\n''', encoding='utf-8')
 
@@ -65,8 +63,6 @@ jobs:
           text = text.replace('return os.Getenv(adminTokenEnv)', 'return adminTokenFromEnv()')
           admin.write_text(text, encoding='utf-8')
 
-          # The repository rename is complete, so the release installer no
-          # longer needs a fallback to the historical slug.
           installer = Path('internal/admin/agent-skill/scripts/install_release.py')
           text = installer.read_text(encoding='utf-8')
           text = text.replace('LEGACY_REPO = "online111111/mcp-manager"\n', '')
@@ -81,8 +77,6 @@ jobs:
           text = text.replace('(or migrate an existing online111111/mcp-manager installation)', '(including installations created before the MCP Manager rename)')
           skill.write_text(text, encoding='utf-8')
 
-          # The pre-release migration is complete: keep runtime env aliases for
-          # upgrades, but remove old source entrypoints and old document stubs.
           for old in [Path('MCP-Hub-Agent实施手册.md'), Path('MCP-Hub-开发设计文档.md')]:
               if old.exists():
                   old.unlink()
@@ -143,7 +137,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git rm .github/workflows/finalize-rename.yml
+          git rm -f .github/workflows/finalize-rename.yml
           git add -A
           git diff --cached --check
           git config user.name 'github-actions[bot]'
