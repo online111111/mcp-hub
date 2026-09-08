@@ -46,6 +46,45 @@ http://127.0.0.1:8080/mcp
 
 需要接手代码、审查或部署项目的 Agent，优先从根目录 [`AGENTS.md`](AGENTS.md) 开始读取。
 
+## 让 Agent 自动部署
+
+如果你的 Agent 已经获得目标服务器的 SSH、终端或服务器管理权限，可以直接把下面这段提示词交给它。提示词同时适用于首次部署和已有实例的安全升级。
+
+```text
+请把 https://github.com/online111111/mcp-manager 部署到我已经授权你管理的服务器上。请使用你当前可用的 SSH、终端或服务器管理工具直接完成部署，不要只给我一份命令清单。
+
+开始修改之前：
+1. 先阅读仓库中的 AGENTS.md、README.zh-CN.md（或 README.md）、docs/VPS.md、docs/SECURITY.md、docs/CONFIG.md。
+2. 检查目标机器的操作系统、CPU 架构、当前权限、已有 MCP Manager 安装、服务管理器、反向代理、监听端口和相关防火墙状态。
+3. 如果已经存在 MCP Manager 或旧版本部署，先备份当前二进制、config、环境变量文件、服务定义和反向代理配置，再进行任何修改。除非确实需要迁移或轮换，否则保留现有 JSON schema、/mcp、/admin 路径以及仍然有效的凭据。
+4. 优先使用合适的最新 GitHub Release，并校验 SHA256SUMS。如果当前项目还没有正式 Release，则固定到当前 main 的一个精确 commit，记录 commit SHA，从该版本构建 mcp-manager，并在安装前运行目标环境能够执行的仓库验证/测试。
+
+部署要求：
+- 在条件允许时使用独立的非 root 服务账号运行 MCP Manager。
+- MCP Manager 默认只监听回环地址（通常是 127.0.0.1:8080），不要把 8080 直接暴露到公网。
+- 新部署使用彼此不同的高强度 MCP Token 和 Admin Token，分别通过 MCP_MANAGER_TOKEN、MCP_MANAGER_ADMIN_TOKEN 提供。把它们保存在权限受限的环境文件中，不要在日志、聊天、截图或最终汇报中输出具体值。
+- 根据仓库示例创建或调整 config.json，并在启动/重启服务前执行 `mcp-manager validate`。
+- 使用目标系统原生的服务管理器配置持久运行；普通 Linux VPS 优先使用 systemd。
+- 如果需要公网访问，在回环服务前配置 Caddy 或 Nginx 终止 HTTPS，并严格遵循 docs/VPS.md 和 docs/SECURITY.md。不要为了“能访问”而放宽 Host、Origin 或认证安全要求。
+- 不要顺手修改与本项目无关的 SSH、防火墙、软件包或代理配置。优先采用可回滚的修改，并在验证完成前保留回滚材料。
+
+部署完成后至少验证：
+- 服务已经运行，并且服务管理器状态正常；
+- `mcp-manager status` 和 `mcp-manager doctor` 对预期 endpoint 成功；
+- `/healthz`、`/readyz` 表现正常；
+- 启用 Admin 时，`/admin/` 可以访问并正确认证；
+- `/mcp` 能通过预期的本地或 HTTPS 路径访问；
+- 如果当前有可用的下游或客户端，至少验证一条代表性的 MCP 客户端/工具调用链路。
+
+如果部署导致原本健康的实例变得不健康，先回滚到之前可用的版本，再继续诊断。
+
+全部完成后，只汇报：安装版本或精确 commit SHA、二进制/config/环境文件/服务/反代配置路径、本地或公网 endpoint、验证结果、备份和回滚位置。不要泄露任何 Secret。
+
+对于环境相关但没有明确指定的细节，优先选择最安全、可逆的方案并自主继续；只有缺少必要访问权限，或者存在无法安全推断的真正阻塞信息时才停止。
+```
+
+更详细的部署规则见 [`AGENTS.md`](AGENTS.md) 和 [VPS 部署文档](docs/VPS.md)。兼容的 Agent 还可以直接使用仓库内置的 `internal/admin/agent-skill/` 下的 `mcp-manager-deployer` Skill。
+
 ## 环境变量
 
 新安装统一使用：
