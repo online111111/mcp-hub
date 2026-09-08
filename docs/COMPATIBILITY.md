@@ -1,43 +1,95 @@
 # MCP Hub compatibility
 
-## Protocol and transports
+## Current baseline
 
-The production module uses `github.com/modelcontextprotocol/go-sdk v1.4.1` and its negotiated MCP protocol support, with the project baseline centered on 2025-06-18. Supported downstream transports in P0 are:
+The production module and the independent SDK probe both use `github.com/modelcontextprotocol/go-sdk v1.7.0` with Go 1.25 as the declared compatibility floor. CI currently exercises Go 1.25.8 and Go 1.27.1 on Linux, Windows, and macOS.
 
-- stdio/IO transport managed by the Hub process owner;
-- Streamable HTTP, including the SDK's stateful POST and optional standalone SSE behavior.
+MCP Hub intentionally keeps a stateful/session-oriented compatibility model centered on the 2025-11-25 generation of Streamable HTTP behavior while using SDK v1.7.0. Discovery contains compatibility handling for older peers. This repository does **not** claim complete native implementation of every MCP 2026-07-28 capability exposed by the SDK.
 
-Legacy HTTP+SSE is P1 and is not guessed or silently downgraded. Resources, prompts, sampling, roots, elicitation, task extensions, and unknown extension methods are outside the P0 proxy contract.
+Supported downstream transports are:
+
+- managed stdio / IO transports;
+- remote Streamable HTTP over HTTPS, with loopback HTTP allowed for local development.
+
+The gateway currently focuses on tool aggregation and routing. Resources, prompts, sampling, roots, elicitation, task extensions, arbitrary extension methods, and a general legacy HTTP+SSE proxy are outside the supported proxy contract unless explicitly documented otherwise.
 
 ## Client connection modes
 
-HTTP-capable clients should connect to the running Hub's `/mcp` endpoint, for example `http://127.0.0.1:8080/mcp`. Clients that only support stdio can use the generated command:
+HTTP-capable clients should connect to the Hub `/mcp` endpoint:
 
 ```text
-<mcp-hub absolute path> stdio --connect http://127.0.0.1:8080/mcp
+https://mcp.example.com/mcp
 ```
 
-The bridge maintains one Hub session for that client, mirrors the Hub tool directory with SDK `AddTool`/`RemoveTools`, forwards the public tool name, and does not launch downstream processes. Multiple bridges can share one Hub and its already-managed downstream sessions.
+Clients that only support stdio can use the built-in bridge:
 
-## Compatibility matrix
+```bash
+MCP_HUB_TOKEN='...' mcp-hub stdio --connect https://mcp.example.com/mcp
+```
 
-The following entries are intentionally `NOT_RUN` until the exact installed client version is manually exercised. Automated SDK and end-to-end fixture tests are not a substitute for this matrix.
+The bridge keeps one upstream Hub session for the client, mirrors the Hub tool directory, forwards calls without launching duplicate downstream processes, and exits when the Hub connection is no longer usable.
 
-| Client / source | OS and exact version | Connection | list/call | list_changed | Result |
+Use `mcp-hub export --help` and the current `export` command when a supported client configuration format is needed. Do not hand-author a client format merely because an older example happened to work.
+
+## Downstream compatibility behavior
+
+For stdio downstreams:
+
+- arguments are passed as distinct process arguments; ordinary commands are not shell-interpolated;
+- only a safe compatibility environment baseline is inherited;
+- secrets and other extra values must be explicitly forwarded through the server `env` map;
+- explicit use of `cmd.exe`, `cmd`, or another shell opts into that shell's semantics and risks.
+
+For remote Streamable HTTP downstreams:
+
+- non-loopback plaintext HTTP is rejected;
+- redirects are rejected;
+- configured headers cannot replace MCP/session framing headers;
+- response and request sizes are bounded;
+- external error details are sanitized before they reach normal diagnostics.
+
+## Automated evidence
+
+The repository currently has automated evidence for:
+
+- SDK v1.7.0 feasibility and protocol/transport regressions in `verification/sdkprobe`;
+- root-module unit and integration tests;
+- race tests on current Go for Linux, Windows, and macOS;
+- native POSIX process-group and Windows Job Object lifecycle behavior;
+- dynamic tool publication, pagination, cancellation, routing, hot reload, and graceful drain;
+- stdio bridge synchronization and authenticated Hub access;
+- Admin API authentication, CSRF, ETag/CAS persistence, preflight, rollback, and secret placeholders;
+- remote Admin CLI `list/get/add/edit/delete` behavior;
+- Chromium management-console interaction/design regressions and a real-Hub Chromium smoke test on Linux;
+- `govulncheck` on the production module.
+
+Passing those checks is evidence for the tested contracts, not a universal certification of every MCP client, downstream server, reverse proxy, operating-system release, or provider network.
+
+## Manual compatibility matrix
+
+The following client rows remain `NOT_RUN` until an exact installed version is exercised end to end.
+
+| Client / source | Exact version | Connection | list/call | list_changed | Result |
 |---|---|---|---|---|---|
 | Cursor | not recorded | stdio | NOT_RUN | NOT_RUN | NOT_RUN |
 | Cursor | not recorded | Streamable HTTP | NOT_RUN | NOT_RUN | NOT_RUN |
 | Claude Desktop | not recorded | stdio | NOT_RUN | NOT_RUN | NOT_RUN |
-| User file MCP | not recorded | stdio | NOT_RUN | NOT_RUN | NOT_RUN |
-| User remote MCP | not recorded | Streamable HTTP | NOT_RUN | NOT_RUN | NOT_RUN |
+| User-provided stdio MCP | varies | stdio | NOT_RUN | NOT_RUN | NOT_RUN |
+| User-provided remote MCP | varies | Streamable HTTP | NOT_RUN | NOT_RUN | NOT_RUN |
 
-Manual procedure:
+Recommended manual procedure:
 
-1. Start a Hub with one known fixture or trusted local MCP server.
-2. Run `mcp-hub export --client ... --transport stdio` and install the exact emitted entry, or configure the HTTP URL directly.
-3. Verify initialize, `tools/list`, one normal call, a tool-directory change, and clean client shutdown.
-4. Record OS, client version, connection mode, observed behavior, and any client-specific refresh/reconnect requirement here and in `docs/IMPLEMENTATION-STATUS.md`.
+1. Record the client/server version and OS.
+2. Start a Hub with one trusted fixture or test downstream.
+3. Connect through the intended transport.
+4. Verify initialize, `tools/list`, at least one normal call, a tool-directory change, and clean shutdown/reconnect behavior.
+5. Record any client-specific refresh/reconnect requirements in this file and `IMPLEMENTATION-STATUS.md`.
 
-## Tested implementation evidence
+## Related documentation
 
-The repository's automated tests cover SDK feasibility, HTTP and IO sessions, raw argument forwarding, pagination, dynamic tool publication, cancellation, generation lifecycle, Windows Job ownership tests on Windows, POSIX process-group code paths where run, the three-hop stdio bridge, two simultaneous bridges, list-change propagation, Hub failure exit, and stdout protocol purity. They do not prove compatibility with an untested GUI client or with arbitrary third-party MCP servers.
+- [Configuration](CONFIG.md)
+- [Security](SECURITY.md)
+- [VPS/public deployment](VPS.md)
+- [Remote Admin CLI](REMOTE-ADMIN.md)
+- [Implementation and verification status](IMPLEMENTATION-STATUS.md)
+- [SDK probe](../verification/sdkprobe/README.md)
