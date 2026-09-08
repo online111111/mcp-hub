@@ -27,6 +27,7 @@ type Controller struct {
 	configPath      string
 	currentListen   string
 	startup         *config.ResolvedConfig
+	current         *config.ResolvedConfig
 	restartRequired bool
 	lastReload      string
 	appliedDigest   string
@@ -55,18 +56,25 @@ func NewController(mgr *manager.Manager, configPath, currentListen string, load 
 	if len(startup) > 0 && startup[0] != nil {
 		controller.startup = startup[0]
 	}
-	if controller.startup != nil {
-		snapshot := *controller.startup
-		snapshot.AllowedHosts = append([]string(nil), snapshot.AllowedHosts...)
-		snapshot.TrustedProxies = append([]string(nil), snapshot.TrustedProxies...)
-		controller.startup = &snapshot
-	}
+	controller.startup = cloneResolvedConfig(controller.startup)
+	controller.current = cloneResolvedConfig(controller.startup)
 	return controller
 }
 
 func digest(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+func cloneResolvedConfig(src *config.ResolvedConfig) *config.ResolvedConfig {
+	if src == nil {
+		return nil
+	}
+	clone := *src
+	clone.AllowedHosts = append([]string(nil), src.AllowedHosts...)
+	clone.TrustedProxies = append([]string(nil), src.TrustedProxies...)
+	clone.BearerTokens = append([]string(nil), src.BearerTokens...)
+	return &clone
 }
 
 func (c *Controller) IsReady() bool {
@@ -85,6 +93,25 @@ func (c *Controller) GetRecentCalls() []inbound.RecentCallDTO {
 		return nil
 	}
 	return c.manager.GetRecentCalls()
+}
+
+// BearerTokens returns the currently active MCP access tokens. Unlike the
+// Admin credential and listener settings, MCP bearer tokens are deliberately
+// hot-reloadable so the Admin console can add or remove client credentials
+// without requiring SSH access or a process restart.
+func (c *Controller) BearerTokens() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.current == nil {
+		return nil
+	}
+	if len(c.current.BearerTokens) > 0 {
+		return append([]string(nil), c.current.BearerTokens...)
+	}
+	if c.current.BearerToken != "" {
+		return []string{c.current.BearerToken}
+	}
+	return nil
 }
 
 func (c *Controller) RestartRequired() bool {
@@ -195,10 +222,9 @@ func (c *Controller) apply(ctx context.Context, resolved *config.ResolvedConfig,
 		return config.ErrDigestMismatch{Expected: fileDigest, Actual: currentDigest}
 	}
 
-	// Startup-bound HTTP/admin credentials remain active until the process is
-	// restarted. A reload may contain new credentials and Resolve has already
-	// filtered those new values from stdio environments, but the old active
-	// values must remain filtered as well during the restart-required window.
+	// Startup-bound Admin credentials remain active until the process is
+	// restarted. MCP bearer tokens are hot-reloadable, but both the new active
+	// values and the old startup values must stay filtered from stdio children.
 	stripStartupSecrets(resolved, c.startup)
 
 	if c.manager != nil {
@@ -212,7 +238,6 @@ func (c *Controller) apply(ctx context.Context, resolved *config.ResolvedConfig,
 		resolved.PublicURL != c.startup.PublicURL ||
 		!reflect.DeepEqual(resolved.AllowedHosts, c.startup.AllowedHosts) ||
 		!reflect.DeepEqual(resolved.TrustedProxies, c.startup.TrustedProxies) ||
-		resolved.BearerToken != c.startup.BearerToken ||
 		resolved.AdminEnabled != c.startup.AdminEnabled ||
 		resolved.AdminToken != c.startup.AdminToken ||
 		resolved.AdminSessionTimeout != c.startup.AdminSessionTimeout)
@@ -225,6 +250,7 @@ func (c *Controller) apply(ctx context.Context, resolved *config.ResolvedConfig,
 	} else {
 		c.lastReload = "reloaded successfully"
 	}
+	c.current = cloneResolvedConfig(resolved)
 	c.appliedDigest = fileDigest
 	c.candidateDigest = ""
 	c.candidateCount = 0
@@ -235,7 +261,11 @@ func stripStartupSecrets(resolved, startup *config.ResolvedConfig) {
 	if resolved == nil || startup == nil {
 		return
 	}
-	secrets := []string{startup.BearerToken, startup.AdminToken}
+	secrets := append([]string(nil), startup.BearerTokens...)
+	if len(secrets) == 0 && startup.BearerToken != "" {
+		secrets = append(secrets, startup.BearerToken)
+	}
+	secrets = append(secrets, startup.AdminToken)
 	for id, srv := range resolved.Servers {
 		if srv.Type != config.ServerTypeStdio || len(srv.Env) == 0 {
 			continue

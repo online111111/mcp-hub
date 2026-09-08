@@ -18,6 +18,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -201,11 +202,28 @@ func (h *Handler) serveAPI(w http.ResponseWriter, r *http.Request) {
 			h.writeJSON(w, http.StatusOK, h.opts.Status())
 		}
 	case r.URL.Path == "/api/admin/v1/agent-prompt" && r.Method == http.MethodGet:
+		// Kept for backwards compatibility with v0.4.0 bookmarks. The Admin UI
+		// now exposes the client connector prompt instead of server deployment.
 		h.getAgentPrompt(w)
 	case r.URL.Path == "/api/admin/v1/agent-skill.zip" && r.Method == http.MethodGet:
 		h.getAgentSkill(w)
+	case r.URL.Path == "/api/admin/v1/client-prompt" && r.Method == http.MethodGet:
+		h.getClientPrompt(w)
+	case r.URL.Path == "/api/admin/v1/client-skill.zip" && r.Method == http.MethodGet:
+		h.getClientSkill(w)
 	case r.URL.Path == "/api/admin/v1/config" && r.Method == http.MethodGet:
 		h.getConfig(w)
+	case r.URL.Path == "/api/admin/v1/tokens" && r.Method == http.MethodGet:
+		h.getTokens(w)
+	case r.URL.Path == "/api/admin/v1/tokens" && r.Method == http.MethodPost:
+		h.postToken(w, r)
+	case strings.HasPrefix(r.URL.Path, "/api/admin/v1/tokens/") && r.Method == http.MethodDelete:
+		index, err := strconv.Atoi(strings.TrimPrefix(r.URL.Path, "/api/admin/v1/tokens/"))
+		if err != nil || index < 0 {
+			http.Error(w, "invalid token index", http.StatusBadRequest)
+			return
+		}
+		h.deleteToken(w, r, index)
 	case strings.HasPrefix(r.URL.Path, "/api/admin/v1/servers/"):
 		id, err := url.PathUnescape(strings.TrimPrefix(r.URL.Path, "/api/admin/v1/servers/"))
 		if err != nil || id == "" || strings.Contains(id, "/") {
@@ -466,6 +484,9 @@ func (h *Handler) readRawConfig() (*config.Config, string, error) {
 func redactConfig(cfg *config.Config) {
 	if cfg.Hub.Auth.BearerToken != "" {
 		cfg.Hub.Auth.BearerToken = secretSentinel
+	}
+	for i := range cfg.Hub.Auth.BearerTokens {
+		cfg.Hub.Auth.BearerTokens[i] = secretSentinel
 	}
 	if cfg.Hub.Admin.Token != "" {
 		cfg.Hub.Admin.Token = secretSentinel

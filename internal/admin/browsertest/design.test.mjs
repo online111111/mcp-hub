@@ -9,7 +9,7 @@ before(async () => {
   server = createServer(async (req, res) => {
     const path = new URL(req.url, 'http://localhost').pathname;
     const name = path === '/' ? 'index.html' : path.replace(/^\/admin\//, '');
-    if (!['index.html', 'app.css', 'app.js', 'app-core.mjs'].includes(name)) return res.writeHead(404).end();
+    if (!['index.html', 'app.css', 'enhancements.css', 'app.js', 'app-core.mjs'].includes(name)) return res.writeHead(404).end();
     res.setHeader('Content-Type', name.endsWith('html') ? 'text/html' : name.endsWith('css') ? 'text/css' : 'text/javascript');
     res.end(await readFile(new URL(`../web/${name}`, import.meta.url)));
   });
@@ -31,7 +31,8 @@ async function setup(t, width = 1440) {
     if (!authenticated) return respond({}, 401);
     if (path.endsWith('/auth/me')) return respond({ csrfToken: 'design-fixture' });
     if (path.endsWith('/config')) return respond({ mcpServers: { filesystem: { type: 'stdio', command: 'node', args: ['server.mjs'] } } });
-    if (path.endsWith('/status')) return respond({ version: 'design-fixture', servers: [{ id: 'filesystem', state: 'ready', toolCount: 4 }], recentCalls: [{ tool: 'filesystem.read_file', serverId: 'filesystem', outcome: 'success', durationMs: 24, time: '2026-09-07T10:00:00Z' }] });
+    if (path.endsWith('/tokens')) return respond({ tokens: [{ index: 0, token: 'design-token-000000000000000000000000000001', legacy: true }] });
+    if (path.endsWith('/status')) return respond({ version: 'design-fixture', servers: [{ id: 'filesystem', state: 'ready', publishedToolCount: 4 }], recentCalls: [{ tool: 'filesystem.read_file', serverId: 'filesystem', outcome: 'success', durationMs: 24, time: '2026-09-07T10:00:00Z' }] });
     return respond({});
   });
   await page.goto(origin);
@@ -64,16 +65,27 @@ test('editor switch exposes a visible keyboard focus ring', async t => {
   assert.ok(parseFloat(ring.width) >= 2);
 });
 
-test('call filters have persistent accessible names', async t => {
+test('search, filters and page-size controls have persistent accessible names', async t => {
   const page = await setup(t);
-  assert.ok(await page.locator('#callSearch').getAttribute('aria-label'));
-  assert.ok(await page.locator('#callOutcome').getAttribute('aria-label'));
+  for (const id of ['serverSearch', 'callSearch', 'callOutcome']) assert.ok(await page.locator(`#${id}`).getAttribute('aria-label'));
+  assert.equal(await page.locator('#serverPageSize').isVisible(), true);
+  assert.equal(await page.locator('#callPageSize').isVisible(), true);
+});
+
+test('client access combines tokens, manual config and local Agent setup', async t => {
+  const page = await setup(t);
+  assert.equal(await page.locator('#accessTokenSelect').isVisible(), true);
+  assert.match(await page.locator('#mcpEndpoint').textContent(), /\/mcp$/);
+  assert.match(await page.locator('#httpAuthorization').textContent(), /^Authorization: Bearer /);
+  assert.equal(await page.locator('a[href="/api/admin/v1/client-skill.zip"]').isVisible(), true);
+  assert.equal(await page.locator('#copyClientPrompt').isVisible(), true);
+  assert.equal(await page.locator('text=Agent 自动部署').count(), 0);
 });
 
 for (const width of [320, 390, 768, 1024, 1440]) {
   test(`all sections and call columns preserved without page overflow at ${width}px`, async t => {
     const page = await setup(t, width);
-    for (const id of ['overview', 'serversSection', 'callsSection', 'connectSection', 'agentDeploySection']) assert.equal(await page.locator(`#${id}`).isVisible(), true, id);
+    for (const id of ['overview', 'serversSection', 'callsSection', 'connectSection']) assert.equal(await page.locator(`#${id}`).isVisible(), true, id);
     assert.equal(await page.locator('.call-table th').nth(1).isVisible(), true);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'page overflows horizontally');
     for (const item of await page.locator('.nav-item').all()) {

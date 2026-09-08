@@ -1,0 +1,3 @@
+interface:
+  display_name: "MCP Manager Connector"
+  short_description: "Connect local MCP clients to an existing MCP Manager"

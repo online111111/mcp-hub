@@ -27,6 +27,27 @@ MCP Manager reads one strict JSON configuration file. The file is the persistent
 
 `enabled` defaults to `true`; `type` is `stdio` or `streamable_http`.
 
+## MCP access tokens
+
+`hub.auth.bearerToken` remains the original single-token field and is fully supported. `hub.auth.bearerTokens` adds optional additional tokens with exactly the same MCP access authority:
+
+```json
+{
+  "hub": {
+    "auth": {
+      "bearerToken": "${MCP_MANAGER_TOKEN}",
+      "bearerTokens": [
+        "another-at-least-32-character-token"
+      ]
+    }
+  }
+}
+```
+
+The effective token set is the legacy `bearerToken` first, followed by `bearerTokens`. Entries may use `${NAME}` expansion, must be at least 32 characters after expansion, and must be unique. The Admin Token must remain distinct from every MCP access token.
+
+The Browser Admin can list the effective MCP access tokens and add or delete them from **Client access**. These changes use the normal CSRF + ETag/CAS + atomic persistence + rollback transaction and are hot-reloaded into inbound MCP authentication without restarting the Manager. The Admin Token itself remains a separate startup-bound credential.
+
 ## stdio
 
 stdio servers require `command` and may use `args`, `cwd`, and `env`. Arguments are passed without implicit shell interpolation.
@@ -54,6 +75,7 @@ New public deployment examples use `${MCP_MANAGER_TOKEN}` and `${MCP_MANAGER_ADM
 
 - config: 1 MiB maximum
 - configured servers: 32 maximum
+- MCP access tokens: each effective token is at least 32 characters and token values must be unique
 - `startupTimeout`: positive, max 24h, default `20s`
 - `callTimeout`: positive, max 24h, default `60s`
 - `maxConcurrency`: 1-64, default `8`, no waiting queue
@@ -63,7 +85,7 @@ New public deployment examples use `${MCP_MANAGER_TOKEN}` and `${MCP_MANAGER_ADM
 
 Connection-level downstream changes use break-before-make generation replacement. Existing admitted calls stay on the generation from which they obtained a lease. A call-timeout-only change affects new calls without replacing the downstream generation.
 
-Listener/public-mode/auth/Admin settings are startup-bound. When `restartRequired` is reported, restart MCP Manager to fully apply those settings.
+MCP access-token additions/removals are hot-reloadable. Listener, public-mode/origin/host/proxy policy, and Admin authentication settings remain startup-bound. When `restartRequired` is reported, restart MCP Manager to fully apply those startup-bound settings.
 
 ## Import
 
@@ -89,7 +111,7 @@ Browser Admin and `mcp-manager admin` share one server-side transaction model:
 7. apply the validated runtime snapshot;
 8. roll back persistence/runtime if live apply fails.
 
-Direct file editing remains appropriate for bootstrap, startup-bound settings, or offline recovery, but normal downstream CRUD should prefer Browser/Remote Admin so validation, preflight, CAS, and rollback remain active.
+Direct file editing remains appropriate for bootstrap, startup-bound settings, or offline recovery, but normal downstream CRUD and MCP token management should prefer Browser/Remote Admin so validation, preflight, CAS, and rollback remain active.
 
 ## Validate and serve
 
@@ -106,4 +128,3 @@ mcp-manager serve --config config.json
 - [Security](SECURITY.md)
 - [Compatibility](COMPATIBILITY.md)
 - [VPS deployment](VPS.md)
-- [Implementation status](IMPLEMENTATION-STATUS.md)

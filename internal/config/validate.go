@@ -44,6 +44,9 @@ func Validate(cfg *Config) error {
 	if err := validateListenAddress(listen, cfg.Hub.PublicMode); err != nil {
 		return fmt.Errorf("invalid hub.listen: %w", err)
 	}
+	if err := validateRawBearerTokens(cfg.Hub.Auth); err != nil {
+		return err
+	}
 	if cfg.Hub.PublicMode {
 		if strings.TrimSpace(cfg.Hub.PublicURL) == "" {
 			return fmt.Errorf("hub.publicUrl is required when publicMode is enabled")
@@ -55,8 +58,8 @@ func Validate(cfg *Config) error {
 		if len(cfg.Hub.AllowedHosts) == 0 {
 			return fmt.Errorf("hub.allowedHosts is required when publicMode is enabled")
 		}
-		if strings.TrimSpace(cfg.Hub.Auth.BearerToken) == "" {
-			return fmt.Errorf("hub.auth.bearerToken is required when publicMode is enabled")
+		if !hasRawBearerToken(cfg.Hub.Auth) {
+			return fmt.Errorf("hub.auth requires bearerToken or bearerTokens when publicMode is enabled")
 		}
 	}
 	if cfg.Hub.Admin.Enabled {
@@ -106,6 +109,35 @@ func Validate(cfg *Config) error {
 		if err := validateServer(id, s); err != nil {
 			return fmt.Errorf("server %q: %w", id, err)
 		}
+	}
+	return nil
+}
+
+func hasRawBearerToken(auth HubAuthConfig) bool {
+	if strings.TrimSpace(auth.BearerToken) != "" {
+		return true
+	}
+	for _, token := range auth.BearerTokens {
+		if strings.TrimSpace(token) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func validateRawBearerTokens(auth HubAuthConfig) error {
+	seen := make(map[string]struct{}, 1+len(auth.BearerTokens))
+	if strings.TrimSpace(auth.BearerToken) != "" {
+		seen[auth.BearerToken] = struct{}{}
+	}
+	for i, token := range auth.BearerTokens {
+		if strings.TrimSpace(token) == "" {
+			return fmt.Errorf("hub.auth.bearerTokens[%d] must not be empty", i)
+		}
+		if _, duplicate := seen[token]; duplicate {
+			return fmt.Errorf("hub.auth bearer tokens must be unique")
+		}
+		seen[token] = struct{}{}
 	}
 	return nil
 }
