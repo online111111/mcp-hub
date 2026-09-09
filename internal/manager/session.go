@@ -49,10 +49,11 @@ func (f *DefaultSessionFactory) CreateSession(
 	switch srv.Type {
 	case config.ServerTypeStreamableHTTP:
 		opts := downstream.HTTPOptions{
-			Endpoint:          srv.URL,
-			Headers:           srv.Headers,
-			StartupTimeout:    srv.StartupTimeout,
-			OnToolListChanged: onToolListChanged,
+			Endpoint:             srv.URL,
+			Headers:              srv.Headers,
+			StartupTimeout:       srv.StartupTimeout,
+			DisableStandaloneSSE: true,
+			OnToolListChanged:    onToolListChanged,
 		}
 		sess, err := downstream.DialHTTP(ctx, opts)
 		if err != nil {
